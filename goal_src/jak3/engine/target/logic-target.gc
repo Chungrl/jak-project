@@ -2571,8 +2571,13 @@
   (none)
   )
 
+;; (AI-assisted) defined by skate3-bridge, which loads after this file
+(#when PC_PORT
+  (define-extern target-skate3-bridge-on-foot (function none :behavior target)))
+
 (defbehavior target-post target ()
   (target-real-post)
+  (#when PC_PORT (target-skate3-bridge-on-foot))
   (none)
   )
 

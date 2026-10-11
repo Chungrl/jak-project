@@ -75,8 +75,8 @@
 (defconstant SKATE3_RIG_FIRST_BONE 3)
 
 (define-extern pc-skate3-bridge (function skate3-bridge-io int))
-;; Defined by target-board, which loads after this file.
-(define-extern target-board-exit-check (function none :behavior target))
+;; Defined by board-states, which loads after this file.
+(define-extern target-board-get-off (state handle symbol target))
 
 (define *jak3-skate3-bridge-enabled* #f)
 (define *jak3-skate3-bridge-active* #f)
@@ -126,8 +126,10 @@
     (if invert (- value) value)))
 
 (defun skate3-bridge-read-pad! ((io skate3-bridge-io) (pad cpad-info))
-  "Translate the pad to the Xbox layout Skate 3 expects. R2 is left to the
-   jetboard's own dismount."
+  "Translate the pad to the Xbox layout Skate 3 expects: cross, circle and
+   square are its A, B and X, and L2 and R2 its triggers. Triangle is Skate 3's
+   get-off-the-board button and is handled by the bridge itself (it takes Jak
+   off the board), so it is not passed to the engine."
   (set! (-> io left-x) (skate3-bridge-stick (the-as int (-> pad leftx)) #f))
   (set! (-> io left-y) (skate3-bridge-stick (the-as int (-> pad lefty)) #t))
   (set! (-> io right-x) (skate3-bridge-stick (the-as int (-> pad rightx)) #f))
@@ -143,10 +145,9 @@
     (if (logtest? held (pad-buttons x)) (logior! buttons #x1000))
     (if (logtest? held (pad-buttons circle)) (logior! buttons #x2000))
     (if (logtest? held (pad-buttons square)) (logior! buttons #x4000))
-    (if (logtest? held (pad-buttons triangle)) (logior! buttons #x8000))
     (set! (-> io buttons) (the-as uint buttons))
     (set! (-> io left-trigger) (if (logtest? held (pad-buttons l2)) 1.0 0.0))
-    (set! (-> io right-trigger) 0.0))
+    (set! (-> io right-trigger) (if (logtest? held (pad-buttons r2)) 1.0 0.0)))
   (none))
 
 (defun skate3-bridge-clear-input! ((io skate3-bridge-io))
@@ -369,6 +370,21 @@
        (set! *jak3-skate3-bridge-enabled* #f)
        #f))))
 
+(defbehavior target-skate3-bridge-on-foot target ()
+  "Called from Jak's normal post. Clicking both sticks together puts him on the
+   skateboard, unlocking the jetboard it is built on if he does not have it."
+  (let ((pad (-> self control cpad number)))
+    (when (and (not *jak3-skate3-bridge-scripted-input*)
+               (or (and (cpad-pressed? pad l3) (cpad-hold? pad r3))
+                   (and (cpad-pressed? pad r3) (cpad-hold? pad l3)))
+               (not (focus-test? self dead grabbed in-head pilot mech dark indax))
+               (not *pause-lock*))
+      (logior! (-> *game-info* features) (game-feature board))
+      (logior! (-> *game-info* debug-features) (game-feature board))
+      (set! *jak3-skate3-bridge-enabled* #t)
+      (send-event self 'change-mode 'board #f)))
+  (none))
+
 (defbehavior target-skate3-bridge-post target ()
   "The jetboard's post while the bridge drives it. #f when the bridge is not
    driving this frame and the normal jetboard post must run instead."
@@ -378,7 +394,9 @@
     (when (and (not *jak3-skate3-bridge-scripted-input*)
                (or (and (cpad-pressed? pad l3) (cpad-hold? pad r3))
                    (and (cpad-pressed? pad r3) (cpad-hold? pad l3))))
-      (set! *jak3-skate3-bridge-enabled* (not *jak3-skate3-bridge-enabled*))))
+      (set! *jak3-skate3-bridge-enabled* (not *jak3-skate3-bridge-enabled*))
+      ;; the same press must not be seen again by the on-foot shortcut
+      (cpad-clear! pad l3 r3)))
   (cond
     ((not *jak3-skate3-bridge-enabled*)
      (if *jak3-skate3-bridge-active*
@@ -395,8 +413,12 @@
      (target-board-joint-points)
      (if *jak3-skate3-bridge-hud*
          (skate3-bridge-draw-hud))
-     ;; R2 still gets Jak off the board.
-     (target-board-exit-check)
+     ;; Triangle gets off the board, as in Skate 3 (R2 is a grab here).
+     (if (and (not *jak3-skate3-bridge-scripted-input*)
+              (cpad-pressed? (-> self control cpad number) triangle)
+              (not (focus-test? self dead grabbed))
+              (not *pause-lock*))
+         (go target-board-get-off (process->handle self) #f))
      #t)
     (else
      #f)))

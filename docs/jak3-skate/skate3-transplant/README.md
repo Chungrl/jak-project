@@ -145,6 +145,47 @@ Read locally in `skate3-work/repos` (mashup `f608f85`, San Andreas `fde499b`):
 
 Not yet done: building `skate-ffi` for x64, converting the data, or calling it.
 
+## Overnight state (2026-10-11 to 12): Jak skates
+
+How to play it, the controls and the known limits are in
+[PLAYING.md](PLAYING.md). In short, while the bridge is active:
+
+- the engine rides the level's own background collision, gathered around Jak
+  through the collide cache and re-gathered as he moves;
+- Jak's skeleton is fitted to the Skate 3 skater's pose every step
+  (`sk_rig_setup` / `sk_rig_pose`, applied through `postbind-function`);
+- the engine's own skateboard model is drawn by `SkateBoardRenderer`;
+- the bridge replaces the jetboard's movement update instead of following it;
+- Skate 3's trick names and score are shown as text.
+
+Findings worth keeping:
+
+- Jak is drawn 1.4 times the size of his model (the scale is in his bone
+  matrices), and his world is built to match. The engine is told one of its
+  metres is 4096 x 1.4 game units; without that the board and speeds look small.
+- A joint's `bind-pose` field in GOAL is the inverse bind matrix.
+- A GOAL matrix in memory is the same 16 floats as a column-major matrix, so
+  matrices cross the bridge without transposing.
+- The level's collision triangles already wind the way the engine expects.
+- `CollideMeshRenderer`'s camera maths did not put geometry on screen in Jak 3;
+  the skateboard uses the background shaders' `pc_camera` projection, now also
+  kept in `SharedRenderState::camera_pc`.
+- After a bail the engine respawns the skater at a remembered spot, or at its
+  origin when it has none. The bridge catches a jump outside the gathered world
+  and restarts him at the last place the wheels were down.
+- A function spawned with `process-spawn-function` has about 256 bytes of stack
+  to suspend with; the manual checks are step functions called once a frame.
+- `sk_preload` on a background thread at boot did not shorten the first
+  activation (about 9 s) and was removed.
+- Codex agents cannot run local commands on this machine in the `read-only` or
+  `workspace-write` sandboxes; they do under the default configuration.
+
+Three bounded research tasks and one code review went to Codex `gpt-6-luna` at
+high effort (rig and board handling in the San Andreas host; Daxter, the
+jetboard model and native effects in this repository; a defect review of the
+bridge). The review's one finding, that water and moving collision are not
+handled while skating, stands as a documented limit.
+
 ## First in-game bridge run (2026-10-11, about 21:37)
 
 Route chosen: the engine in-process, through the `skate-ffi` C interface.
