@@ -1,5 +1,19 @@
 # Verification results (AI-assisted)
 
+## Current skating recovery
+
+For `jak3-skate-controls`, see [RECOVERY_STATUS.md](RECOVERY_STATUS.md) and the
+preserved logs/XML in `docs/jak3-skate/recovery`. Before interruption, 25 new model
+tests passed and the native test target built. The **latest integrated GOAL
+compilation failed** with `failed to find close paren` in `target-board.gc`.
+The model-test pass predates the last integration edits. No full suite, Windows
+gameplay validation or new build/test execution occurred during recovery.
+
+Everything below reports the earlier **`jak3-nextgen-lab` coasting foundation**
+and must not be presented as verification of this skating snapshot.
+
+## Historical lab verification
+
 Date: 2026-10-11. Branch: `jak3-nextgen-lab`.
 Baseline: `efb21c3e8c5a40a74f2e86510f915da55eaeba34`.
 

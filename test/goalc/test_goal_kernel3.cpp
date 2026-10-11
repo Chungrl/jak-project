@@ -35,6 +35,30 @@ class Jak3KernelTest : public testing::Test {
 
   void SetUp() {}
 
+  // Pure production skate modules can run in the real Jak 3 GOAL kernel without
+  // copyrighted assets. Load once, in the same order as GAME.DGO.
+  void LoadSkateModules() {
+    if (shared_compiler->skate_modules_loaded) {
+      return;
+    }
+    for (const char* module : {"skate-input", "skate-physics", "skate-tricks", "skate-runtime"}) {
+      shared_compiler->runner.c->run_test_from_string(
+          std::string("(ml \"goal_src/jak3/engine/target/board/") + module + ".gc\")");
+    }
+    for (const char* fixture : {"skate-input-test", "skate-physics-test", "skate-tricks-test",
+                                "skate-runtime-test"}) {
+      shared_compiler->runner.c->run_test_from_string(
+          std::string("(ml \"test/goalc/source_templates/jak3/") + fixture + ".gc\")");
+    }
+    shared_compiler->skate_modules_loaded = true;
+  }
+
+  void CheckSkateFunction(const std::string& function) {
+    LoadSkateModules();
+    auto result = shared_compiler->runner.c->run_test_from_string("(printl (" + function + ")) 0");
+    EXPECT_EQ(result, (std::vector<std::string>{"#t\n0\n"}));
+  }
+
   void TearDown() {}
 
   struct SharedCompiler {
@@ -42,6 +66,7 @@ class Jak3KernelTest : public testing::Test {
     std::thread runtime_thread;
     Compiler compiler;
     GoalTest::CompilerTestRunner runner;
+    bool skate_modules_loaded = false;
   };
 
   static std::unique_ptr<SharedCompiler> shared_compiler;
@@ -213,4 +238,110 @@ TEST_F(Jak3KernelTest, BoardNextgenCoastDeceleratesAtCommonFrameRates) {
     0
   )");
   EXPECT_EQ(result, (std::vector<std::string>{"#t\n#t\n#t\n0\n"}));
+}
+
+// (AI-assisted) Simulated input and dynamics call the actual GOAL skate modules;
+// these are not evidence of launched-game collision or animation correctness.
+TEST_F(Jak3KernelTest, SkateInputRecognizesEightBasicAndCompoundGestures) {
+  CheckSkateFunction("skate-test-input-tricks");
+}
+
+TEST_F(Jak3KernelTest, SkateInputRecognizesNollieVariants) {
+  CheckSkateFunction("skate-test-input-nollie-variants");
+}
+
+TEST_F(Jak3KernelTest, SkateInputRejectsNoiseAndShortPreload) {
+  CheckSkateFunction("skate-test-input-rejects-noise-and-short-preload");
+}
+
+TEST_F(Jak3KernelTest, SkateInputBuffersOnceAndRequiresNeutral) {
+  CheckSkateFunction("skate-test-input-buffer-and-lock");
+}
+
+TEST_F(Jak3KernelTest, SkateInputCancelsSlowFlicksAndPausedFrames) {
+  CheckSkateFunction("skate-test-input-invalid-timing");
+}
+
+TEST_F(Jak3KernelTest, SkateInputSupportsConfigurableSensitivityAndDeadZone) {
+  CheckSkateFunction("skate-test-input-configuration");
+}
+
+TEST_F(Jak3KernelTest, SkateInputRecognizesSameTraceAtCommonFrameRates) {
+  CheckSkateFunction("skate-test-input-at-frame-rate 30");
+  CheckSkateFunction("skate-test-input-at-frame-rate 60");
+  CheckSkateFunction("skate-test-input-at-frame-rate 120");
+}
+
+TEST_F(Jak3KernelTest, SkateInputRetainsBufferedPopEnergySnapshots) {
+  CheckSkateFunction("skate-test-input-event-snapshots");
+}
+
+TEST_F(Jak3KernelTest, SkatePhysicsPreservesMomentumAndBoundsIntegration) {
+  CheckSkateFunction("skate-test-physics-momentum");
+}
+
+TEST_F(Jak3KernelTest, SkatePhysicsGroundSpeedAgreesAtCommonFrameRates) {
+  CheckSkateFunction("skate-test-physics-frame-rates");
+}
+
+TEST_F(Jak3KernelTest, SkatePhysicsCarvesProportionallyAndVariesPop) {
+  CheckSkateFunction("skate-test-physics-carve-and-pop");
+}
+
+TEST_F(Jak3KernelTest, SkatePhysicsGravityAndLandingQuality) {
+  CheckSkateFunction("skate-test-physics-gravity-and-landing");
+}
+
+TEST_F(Jak3KernelTest, SkatePhysicsPumpsOnlyCompressedTransitions) {
+  CheckSkateFunction("skate-test-physics-pumping");
+}
+
+TEST_F(Jak3KernelTest, SkateTricksValidateLaunchAndScoreOneLanding) {
+  CheckSkateFunction("skate-test-trick-basic-lifecycle");
+}
+
+TEST_F(Jak3KernelTest, SkateTricksRequireFlipCompletionAndProvideTransforms) {
+  CheckSkateFunction("skate-test-trick-flips-and-failed-landing");
+}
+
+TEST_F(Jak3KernelTest, SkateTricksClassifySketchyAndFailedLandings) {
+  CheckSkateFunction("skate-test-trick-landing-quality");
+}
+
+TEST_F(Jak3KernelTest, SkateTricksLinkSupportsBankCombosAndLoseUnbankedScoreOnBail) {
+  CheckSkateFunction("skate-test-trick-support-links-and-banking");
+}
+
+TEST_F(Jak3KernelTest, SkateTricksRejectBriefManualsAndAirborneSupport) {
+  CheckSkateFunction("skate-test-trick-short-support-and-air-contact");
+}
+
+TEST_F(Jak3KernelTest, SkateTricksSupportOneLateTrickGrabsAndSpins) {
+  CheckSkateFunction("skate-test-trick-late-and-grab");
+}
+
+TEST_F(Jak3KernelTest, SkateTricksAccumulateRotationAtCommonFrameRates) {
+  CheckSkateFunction("skate-test-trick-at-frame-rate 30");
+  CheckSkateFunction("skate-test-trick-at-frame-rate 60");
+  CheckSkateFunction("skate-test-trick-at-frame-rate 120");
+}
+
+TEST_F(Jak3KernelTest, SkateTricksDoNotAwardPhantomOllieOnLedgeFall) {
+  CheckSkateFunction("skate-test-trick-unprompted-fall");
+}
+
+TEST_F(Jak3KernelTest, SkateTricksPitchOlliesAndNolliesAndCapComboMultiplier) {
+  CheckSkateFunction("skate-test-trick-pitch-and-multiplier-cap");
+}
+
+TEST_F(Jak3KernelTest, SkateRuntimeDefaultsOffAndExcludesScriptedControls) {
+  CheckSkateFunction("skate-test-runtime-compatibility-gate");
+}
+
+TEST_F(Jak3KernelTest, SkateRuntimeResetsProfileOwnerAndBufferedInput) {
+  CheckSkateFunction("skate-test-runtime-lifecycle-reset");
+}
+
+TEST_F(Jak3KernelTest, SkateRuntimeShapesControllerBytesAndDeadZone) {
+  CheckSkateFunction("skate-test-runtime-controller-axis");
 }

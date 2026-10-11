@@ -1,0 +1,15 @@
+{
+  "goal_src/jak3/dgos/game.gd": "f1edb9cd452649d515e3e68e1a955f7dd0d669a1ff539368ed6809209cdf3e5f",
+  "goal_src/jak3/engine/camera/cam-states.gc": "5e7003de2343f0cbc8c9840fa6412f6d720ec2ce90c444899eea997d8ae1b409",
+  "goal_src/jak3/engine/target/board/board-states.gc": "2d7cb354aa74cb4bda2596dc7011aa263b9ffb438eb1954792e5d14a086d6453",
+  "goal_src/jak3/engine/target/board/skate-input.gc": "2674905c8795e768b17d3e2488fb66ba66644840002e4c368ff4fe63e6a57431",
+  "goal_src/jak3/engine/target/board/skate-physics.gc": "81032ad9e42e4375787b97d2dd063a046d7ada7132316b3f8e568f0b197a0a8c",
+  "goal_src/jak3/engine/target/board/skate-runtime.gc": "9edcb4e993bc5e04a1d2b3190abb72cd7f2040508ccb2bc4d2a587e1496abe85",
+  "goal_src/jak3/engine/target/board/skate-tricks.gc": "9413417fc279cca5498edc5c609a670b95bc3c1c4b1f46508e9904617210bac1",
+  "goal_src/jak3/engine/target/board/target-board.gc": "8e588f900fb7f5aebdd904d4e74030fff6f4ba0899458220b333241e37b76cdf",
+  "test/goalc/source_templates/jak3/skate-input-test.gc": "44d886ac59ebcfd1b897d54c1e1db1ff9ba220a12b57662b05fb14eeaf0a16e9",
+  "test/goalc/source_templates/jak3/skate-physics-test.gc": "a4ba3a33ec4be67f469ebec71e36695a3c1956028caefd0fa69fbe729cd622c2",
+  "test/goalc/source_templates/jak3/skate-runtime-test.gc": "c195162fde2470ff7074ff274788ef7eb5ae31a5f416345fc2cc042a5f76306b",
+  "test/goalc/source_templates/jak3/skate-tricks-test.gc": "7638bd4e8ee32de22d44fb49821b35ebe0ebd6af9c60329142d7fb0678247345",
+  "test/goalc/test_goal_kernel3.cpp": "3e33bc95f14d12400531dd9ec01ca5b17ec5925b52783d49db2f37457e9628eb"
+}

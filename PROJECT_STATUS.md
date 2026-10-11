@@ -1,3 +1,11 @@
+# Current skating recovery status (AI-assisted)
+
+`jak3-skate-controls` preserves the interrupted work from `jak3-nextgen-lab`.
+The latest integration build fails; 25 earlier model tests passed. See
+[RECOVERY_STATUS.md](RECOVERY_STATUS.md) for evidence, incomplete features and
+the known scripted-state camera-ownership concern. No implementation was added
+during recovery. The project status below describes the historical lab foundation.
+
 # Jak 3: Next Generation — project status (AI-assisted)
 
 Updated: 2026-10-11. Lab branch: `jak3-nextgen-lab`.

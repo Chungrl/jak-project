@@ -1,0 +1,141 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Pure skate dynamics. Values use metres, seconds and radians-free
+;; signed GOAL angles: 65536 is one revolution. Convert engine velocities by 4096
+;; at the target boundary. Never change target/board layouts or vanilla surfaces.
+(#when PC_PORT
+
+(deftype skate-physics-config (basic)
+  ((realism float)            ;; 0 = arcade, 1 = more demanding physical tuning.
+   (push-acceleration float)  ;; m/s^2; left-stick forward supplies [0, 1].
+   (push-speed float)         ;; m/s; pushing fades at this speed, slopes do not.
+   (speed-limit float)        ;; m/s; final safety cap, including downhill energy.
+   (rolling-friction float)   ;; m/s^2 on a unit-friction surface.
+   (brake-acceleration float) ;; m/s^2; left-stick backward supplies [0, 1].
+   (lateral-grip float)       ;; 1/s; alignment removes lateral skid, not momentum.
+   (carve-rate float)         ;; degrees/s at low speed.
+   (carve-speed float)        ;; m/s at which steering authority halves.
+   (pop-min float)            ;; m/s, short preload / soft flick.
+   (pop-max float)            ;; m/s, charged preload / fast flick.
+   (pop-charge-time float)    ;; seconds to full compression.
+   (gravity float)            ;; m/s^2 in arcade profile.
+   (terminal-speed float)     ;; m/s downward.
+   (pump-acceleration float)  ;; m/s^2 at a compressed, curved transition.
+   (air-turn-rate float)))    ;; degrees/s, separate from board flip gestures.
+
+(define *skate-physics-config*
+  (new 'static 'skate-physics-config
+    :realism 0.0 :push-acceleration 8.0 :push-speed 20.0 :speed-limit 35.0
+    :rolling-friction 0.22 :brake-acceleration 16.0 :lateral-grip 8.0
+    :carve-rate 135.0 :carve-speed 14.0
+    :pop-min 4.5 :pop-max 8.5 :pop-charge-time 0.45
+    :gravity 16.0 :terminal-speed 45.0 :pump-acceleration 4.0
+    :air-turn-rate 210.0))
+
+(defun skate-physics-clamp ((value float) (low float) (high float))
+  (fmin high (fmax low value)))
+
+(defun skate-physics-dt ((dt float))
+  ;; The gameplay caller supplies each existing controller substep. Do not
+  ;; integrate a suspended-game interval as a single giant physics step.
+  (skate-physics-clamp dt 0.0 0.1))
+
+(defun skate-physics-realism ()
+  (skate-physics-clamp (-> *skate-physics-config* realism) 0.0 1.0))
+
+(defun skate-gravity ()
+  (let ((arcade (skate-physics-clamp (-> *skate-physics-config* gravity) 1.0 40.0))
+        (realism (skate-physics-realism)))
+    (+ (* arcade (- 1.0 realism)) (* 9.81 realism))))
+
+(defun skate-speed-step ((speed float) (push float) (brake float)
+                        (friction float) (slope float) (dt float))
+  "Forward momentum, driven by push/brake and the actual surface tangent slope."
+  (let* ((step (skate-physics-dt dt))
+         (velocity (fmax 0.0 speed))
+         (push-limit (skate-physics-clamp (-> *skate-physics-config* push-speed) 1.0 40.0))
+         (push-force (* (skate-physics-clamp push 0.0 1.0)
+                        (skate-physics-clamp (-> *skate-physics-config* push-acceleration) 0.0 30.0)
+                        (fmax 0.0 (- 1.0 (/ velocity push-limit)))))
+         (slope-force (* (- (skate-physics-clamp slope -1.0 1.0)) (skate-gravity)))
+         (drag (+ (* (skate-physics-clamp friction 0.0 4.0)
+                    (skate-physics-clamp (-> *skate-physics-config* rolling-friction) 0.0 5.0)
+                    (+ 1.0 (skate-physics-realism)))
+                  (* (skate-physics-clamp brake 0.0 1.0)
+                     (skate-physics-clamp (-> *skate-physics-config* brake-acceleration) 0.0 60.0)))))
+    ;; Coulomb friction cannot reverse a stopped board; uphill gravity also
+    ;; stalls forward speed instead of forcing a scripted turn-around.
+    (skate-physics-clamp (+ velocity (* (- (+ push-force slope-force) drag) step))
+                         0.0
+                         (skate-physics-clamp (-> *skate-physics-config* speed-limit) 1.0 60.0))))
+
+(defun skate-lateral-step ((speed float) (friction float) (dt float))
+  "Stable lateral grip; preserves direction of skid without crossing zero."
+  (/ speed (+ 1.0 (* (skate-physics-clamp (-> *skate-physics-config* lateral-grip) 0.0 30.0)
+                     (skate-physics-clamp friction 0.0 4.0)
+                     (skate-physics-dt dt)))))
+
+(defun skate-carve-rate ((steer float) (speed float))
+  "GOAL yaw units/second. Steering retains analogue strength at every speed."
+  (* 182.04445
+     (skate-physics-clamp steer -1.0 1.0)
+     (skate-physics-clamp (-> *skate-physics-config* carve-rate) 0.0 360.0)
+     (/ 1.0 (+ 1.0 (/ (fabs speed)
+                      (skate-physics-clamp (-> *skate-physics-config* carve-speed) 1.0 50.0))))))
+
+(defun skate-pop-speed ((preload float) (flick-speed float))
+  "Pop m/s combines compressed stance duration and measured stick flick speed."
+  (let* ((charge (skate-physics-clamp
+                  (/ preload (skate-physics-clamp (-> *skate-physics-config* pop-charge-time) 0.05 1.5))
+                  0.0 1.0))
+         ;; A one-unit stick motion over 0.10 s is a strong flick.
+         (snap (skate-physics-clamp (/ flick-speed 10.0) 0.0 1.0))
+         (realism (skate-physics-realism))
+         (low (skate-physics-clamp (-> *skate-physics-config* pop-min) 1.0 10.0))
+         (high (fmax low (skate-physics-clamp (-> *skate-physics-config* pop-max) 1.0 15.0))))
+    (* (+ low (* (- high low) (+ (* charge 0.65) (* snap 0.35))))
+       (- 1.0 (* realism 0.2)))))
+
+(defun skate-vertical-step ((speed float) (dt float))
+  "Upward-positive velocity after gravity; use collision system for position."
+  (fmax (- (skate-physics-clamp (-> *skate-physics-config* terminal-speed) 5.0 100.0))
+        (- speed (* (skate-gravity) (skate-physics-dt dt)))))
+
+(defun skate-air-turn-rate ((steer float))
+  (* 182.04445 (skate-physics-clamp steer -1.0 1.0)
+     (skate-physics-clamp (-> *skate-physics-config* air-turn-rate) 0.0 720.0)
+     (- 1.0 (* 0.3 (skate-physics-realism)))))
+
+(defun skate-landing-quality ((alignment float) (impact float) (normal-up float))
+  "[0,1] from heading dot, pre-contact downward m/s and surface-up dot.
+   Switch landings accept either parallel direction; sideways is a failed edge.
+   Feed pre-collision impact, not the collision solver's zeroed vertical speed."
+  (let* ((realism (skate-physics-realism))
+         (alignment-min (+ 0.35 (* 0.35 realism)))
+         (heading (skate-physics-clamp (/ (- (fabs alignment) alignment-min)
+                                         (- 1.0 alignment-min)) 0.0 1.0))
+         (impact-good (- 9.0 (* 3.0 realism)))
+         (impact-bail (- 20.0 (* 6.0 realism)))
+         (cushion (skate-physics-clamp (/ (- impact-bail (fmax 0.0 impact))
+                                         (- impact-bail impact-good)) 0.0 1.0))
+         (surface (skate-physics-clamp (/ (- normal-up 0.35) 0.45) 0.0 1.0)))
+    (fmin heading (fmin cushion surface))))
+
+(defun skate-landing-speed ((speed float) (quality float))
+  ;; Imperfect landings dissipate energy; perfect landings keep it for links.
+  (* (fmax 0.0 speed) (+ 0.45 (* 0.55 (skate-physics-clamp quality 0.0 1.0)))))
+
+(defun skate-pump-step ((speed float) (compression float) (transition float) (dt float))
+  "Bounded transition pumping: caller supplies curved-surface compression timing.
+   transition must be [0,1] only on a concave halfpipe/ramp, zero on flat ground.
+   Existing rail/halfpipe collision remains responsible for tangent direction."
+  (skate-physics-clamp
+    (+ (fmax 0.0 speed)
+       (* (skate-physics-clamp compression 0.0 1.0)
+          (skate-physics-clamp transition 0.0 1.0)
+          (skate-physics-clamp (-> *skate-physics-config* pump-acceleration) 0.0 15.0)
+          (skate-physics-dt dt)))
+    0.0 (skate-physics-clamp (-> *skate-physics-config* speed-limit) 1.0 60.0)))
+
+)

@@ -1,3 +1,11 @@
+# Recovery handoff takes precedence (AI-assisted)
+
+Skating work is preserved on `jak3-skate-controls`, stacked on `jak3-nextgen-lab`.
+Read [RECOVERY_STATUS.md](RECOVERY_STATUS.md), including the complete feature-area
+checklist and known compile/ownership issues, before planning further work.
+This recovery task authorizes no new feature implementation. The roadmap below
+is historical context from the earlier lab, not skating completion evidence.
+
 # Jak 3: Next Generation roadmap (AI-assisted)
 
 Status date: 2026-10-11. All experiments stay on `jak3-nextgen-lab` and are

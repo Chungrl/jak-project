@@ -1,0 +1,22 @@
+Successfully found all 9 dependencies for target in 0.000s
+Found that 9 of 9 targets do need rebuilding in 0.000s
+Building 9 targets...
+[ 11%] [goalc   ]       goal_src/jak3/kernel/gcommon.gc                                       [ 11%] [goalc   ] 0.031 goal_src/jak3/kernel/gcommon.gc                                       
+[ 22%] [goalc   ]       goal_src/jak3/kernel/gstring-h.gc                                     [ 22%] [goalc   ] 0.000 goal_src/jak3/kernel/gstring-h.gc                                     
+[ 33%] [goalc   ]       goal_src/jak3/kernel/gkernel-h.gc                                     [ 33%] [goalc   ] 0.011 goal_src/jak3/kernel/gkernel-h.gc                                     
+[ 44%] [goalc   ]       goal_src/jak3/kernel/gkernel.gc                                       [ 44%] [goalc   ] 0.045 goal_src/jak3/kernel/gkernel.gc                                       
+[ 56%] [goalc   ]       goal_src/jak3/kernel/pskernel.gc                                      [ 56%] [goalc   ] 0.000 goal_src/jak3/kernel/pskernel.gc                                      
+[ 67%] [goalc   ]       goal_src/jak3/kernel/gstring.gc                                       [ 67%] [goalc   ] 0.019 goal_src/jak3/kernel/gstring.gc                                       
+[ 78%] [goalc   ]       goal_src/jak3/kernel/dgo-h.gc                                         [ 78%] [goalc   ] 0.001 goal_src/jak3/kernel/dgo-h.gc                                         
+[ 89%] [goalc   ]       goal_src/jak3/kernel/gstate.gc                                        [ 89%] [goalc   ] 0.005 goal_src/jak3/kernel/gstate.gc                                        
+[100%] [dgo     ]       goal_src/jak3/dgos/kernel.gd                                          [100%] [dgo     ] 0.000 goal_src/jak3/dgos/kernel.gd                                          
+
+Successfully built all 9 targets in 0.115s
+WARNING - couldn't load because listener isn't connected
+WARNING - couldn't load because listener isn't connected
+WARNING - couldn't load because listener isn't connected
+WARNING - couldn't load because listener isn't connected
+WARNING - couldn't load because listener isn't connected
+WARNING - couldn't load because listener isn't connected
+WARNING - couldn't load because listener isn't connected
+WARNING - couldn't load because listener isn't connected

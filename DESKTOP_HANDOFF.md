@@ -1,5 +1,33 @@
 # Windows desktop handoff (AI-assisted)
 
+## Current handoff: recovered skating work
+
+The current branch is **`jak3-skate-controls`**, with its draft PR targeting
+**`Chungrl/jak-project:jak3-nextgen-lab`**. This is an interrupted, incomplete
+snapshot with a known GOAL reader error; it is not ready for gameplay testing.
+Read [RECOVERY_STATUS.md](RECOVERY_STATUS.md) for exact surviving work, test
+evidence and known issues. Do not rerun `work/integrate-skate-a.py`.
+
+To inspect it without disturbing an existing lab checkout, use an unused worktree
+and local branch name in PowerShell:
+
+```powershell
+git fetch origin jak3-nextgen-lab jak3-skate-controls
+git worktree add -b jak3-skate-recovery-desktop ../jak3-skate-recovery-desktop origin/jak3-skate-controls
+```
+
+No recovery build or gameplay launch was performed. The next engineering owner
+must first resolve the documented syntax and input-ownership issues and rerun
+the model, integration and regression checks. Windows validation must then cover
+controllers and frame rates, original-profile missions/RC/scripted animation,
+ground/pop/collision/rail/halfpipe traversal, and deck/rider animation isolation.
+No archive or ISO should be committed or attached to the PR.
+
+The instructions below belong to **the earlier coasting foundation**; their
+branch, build/test results and feature descriptions do not verify skating.
+
+## Historical lab handoff
+
 Updated: 2026-10-11. Repository: https://github.com/Chungrl/jak-project.
 Feature branch: `jak3-nextgen-lab`. PR base: **`Chungrl/jak-project:master`**.
 Do not target upstream `open-goal/jak-project`.

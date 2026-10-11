@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+cd /repo
+timeout 900 build/nextgen/goalc/goalc --proj-path /repo --game jak3 --cmd '(make "$OUT/obj/board-states.o" :force #t)' > work/skate-a-compile.log 2>&1
