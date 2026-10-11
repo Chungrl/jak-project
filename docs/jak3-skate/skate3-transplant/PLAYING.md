@@ -62,7 +62,9 @@ Checked on Jak 3 NTSC in Spargus, with scripted input and screenshots:
 ## Known limits
 
 - **Not tried with a real controller.** Everything above was driven by scripted
-  input. The pad mapping is written but untested.
+  input. The pad translation was checked against made-up pad states
+  (`skate3-bridge-pad.gc`: sticks, buttons and triggers all map as intended),
+  but nobody has held a pad.
 - **Only the level's solid background is known to the engine.** Moving
   platforms, doors, vehicles and characters are not obstacles to the
   skateboard, and it cannot ride on them. In deep water the bridge hands over
@@ -93,6 +95,7 @@ resets the game when it disconnects):
 (ml "goal_src/jak3/pc/debug/skate3-bridge-test.gc")   ; push and ollie, logged
 (ml "goal_src/jak3/pc/debug/skate3-bridge-look.gc")   ; screenshots of the poses
 (ml "goal_src/jak3/pc/debug/skate3-bridge-cycle.gc")  ; toggling, kickflip, bail, dismount
+(ml "goal_src/jak3/pc/debug/skate3-bridge-pad.gc")    ; pad translation
 ```
 
 Each prints `SK3TEST` lines to the `gk` console; the last two also save

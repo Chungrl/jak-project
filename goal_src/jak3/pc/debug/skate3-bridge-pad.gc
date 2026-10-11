@@ -1,0 +1,44 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Manual check of the pad translation in skate3-bridge.gc against
+;; a made-up pad state. Not part of any DGO. Prints SK3TEST lines to the gk
+;; console: "pad ok" for each case that matches, "pad WRONG" otherwise.
+
+(defun sk3p-check ((label string) (got float) (want float))
+  (format 0 "SK3TEST pad ~S ~S: got ~f want ~f~%"
+          (if (< (fabs (- got want)) 0.02) "ok" "WRONG") label got want)
+  (none))
+
+(defun sk3p-check-bits ((label string) (got int) (want int))
+  (format 0 "SK3TEST pad ~S ~S: got #x~X want #x~X~%" (if (= got want) "ok" "WRONG") label got want)
+  (none))
+
+(let ((pad (the-as cpad-info (&+ (malloc 'global 512) 4)))
+      (io (new 'global 'skate3-bridge-io)))
+  (format 0 "SK3TEST begin~%")
+  ;; sticks: left fully right and up, right fully down and centred
+  (set! (-> pad leftx) (the-as uint 255))
+  (set! (-> pad lefty) (the-as uint 0))
+  (set! (-> pad rightx) (the-as uint 128))
+  (set! (-> pad righty) (the-as uint 255))
+  (set! (-> pad button0-abs 0) (pad-buttons x l1 l2 r2 up))
+  (skate3-bridge-read-pad! io pad)
+  (sk3p-check "left-x right" (-> io left-x) 1.0)
+  (sk3p-check "left-y up" (-> io left-y) 1.0)
+  (sk3p-check "right-x centre" (-> io right-x) 0.0)
+  (sk3p-check "right-y down" (-> io right-y) -1.0)
+  (sk3p-check-bits "cross l1 up" (the-as int (-> io buttons)) #x1101)
+  (sk3p-check "left trigger" (-> io left-trigger) 1.0)
+  (sk3p-check "right trigger" (-> io right-trigger) 1.0)
+  ;; every face and shoulder button; triangle must not reach the engine
+  (set! (-> pad leftx) (the-as uint 0))
+  (set! (-> pad lefty) (the-as uint 255))
+  (set! (-> pad button0-abs 0) (pad-buttons x circle square triangle r1 down left right))
+  (skate3-bridge-read-pad! io pad)
+  (sk3p-check "left-x left" (-> io left-x) -1.0)
+  (sk3p-check "left-y down" (-> io left-y) -1.0)
+  (sk3p-check-bits "cross circle square r1 dpad, no triangle" (the-as int (-> io buttons)) #x720e)
+  (sk3p-check "left trigger off" (-> io left-trigger) 0.0)
+  (sk3p-check "right trigger off" (-> io right-trigger) 0.0)
+  (format 0 "SK3TEST done~%"))
