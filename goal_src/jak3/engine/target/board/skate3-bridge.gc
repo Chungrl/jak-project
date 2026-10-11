@@ -9,9 +9,12 @@
 ;; game/kernel/jak3/skate3_bridge.h. Default off; with the bridge disabled or
 ;; unavailable the jetboard behaves exactly as before.
 ;;
-;; First demonstration only: the engine rides a flat plane laid at the height
-;; where the bridge was activated, and its board position replaces Jak's after
-;; the normal board update. Level collision, grinds and animation are not wired.
+;; The engine rides the level's own background collision: the triangles in a
+;; square around Jak are gathered through the collide cache and handed over,
+;; and gathered again as he moves. While the bridge is active it replaces the
+;; jetboard's own movement update: Jak is put where the engine's board is, and
+;; the skater's pose is fitted to his skeleton and written over his bones after
+;; his own animation. Moving collision and the Skate camera are not wired.
 
 (#when PC_PORT
 
@@ -20,7 +23,7 @@
   ((position      vector :inline) ;; in: activation position. out: skater root
    (velocity      vector :inline) ;; out: board velocity, units per second
    (forward       vector :inline) ;; in: activation facing. out: flattened travel direction
-   (command       int32)          ;; in: 0 step, 1 activate, 2 shutdown
+   (command       int32)          ;; in: see jak3::skate3_bridge::Command
    (status        int32)          ;; out: 0 ok, negative on failure
    (buttons       uint32)         ;; in: XInput button bits
    (left-x        float)          ;; in: sticks, -1..1, up and right positive
@@ -36,17 +39,71 @@
    (grinds        uint32)
    (bails         uint32)
    (tick          uint32)         ;; out: engine steps since the session started
+   (world-tris      uint32)       ;; in: address of an inline array of collide-cache-tri
+   (world-count     uint32)       ;; in: triangles at world-tris
+   (world-triangles uint32)       ;; out: triangles in the engine's installed world
+   (world-rails     uint32)       ;; out: grind rails the engine found in them
+   (rig-bones       uint32)       ;; in: address of an inline array of skate3-rig-bone
+   (rig-count       uint32)       ;; in: host bones in the rig
+   (rig-pose        uint32)       ;; in: address of an inline array of matrix to fill
+   (unit-scale      float)        ;; in: how much larger than his model Jak is drawn
+   (dt              float)        ;; in: seconds of game time for a step; 0 runs exactly one
+   (steps           uint32)       ;; out: fixed engine steps the last step command ran
+   (trick-name      string)       ;; in: string of at least 64 characters for the last trick
+   (tricks          uint32)       ;; out: tricks announced so far; a change means a new name
+   (sequence-active int32)        ;; out: nonzero while a run of tricks is being scored
+   (sequence        float)        ;; out: points of the running sequence
+   (multiplier      float)        ;; out
+   (total           float)        ;; out: points landed this session
    )
-  :size-assert #x70
+  :size-assert #xb0
   )
 
+;; Mirrors jak3::skate3_bridge::RigBone: one of Jak's joints, for the rig setup.
+(deftype skate3-rig-bone (structure)
+  ((inv-bind matrix :inline) ;; the joint's bind-pose field, which is the inverse bind matrix
+   (name     string)         ;; joint name, or 0
+   (parent   int32)          ;; index of the parent node, or -1
+   (pad      uint32 2)
+   )
+  :size-assert #x50
+  )
+
+(defconstant SKATE3_RIG_MAX_BONES 96)
+;; Jak's first three skeleton nodes are not body joints (the unnamed root, align
+;; and prejoint); align in particular carries his movement, so they are left alone.
+(defconstant SKATE3_RIG_FIRST_BONE 3)
+
 (define-extern pc-skate3-bridge (function skate3-bridge-io int))
+;; Defined by target-board, which loads after this file.
+(define-extern target-board-exit-check (function none :behavior target))
 
 (define *jak3-skate3-bridge-enabled* #f)
 (define *jak3-skate3-bridge-active* #f)
 ;; When #t the pad is not read, so a test can drive the input fields directly.
 (define *jak3-skate3-bridge-scripted-input* #f)
 (define *skate3-bridge-io* (new 'global 'skate3-bridge-io))
+(define *skate3-rig-bones* (the-as (inline-array skate3-rig-bone) (malloc 'global (* 80 SKATE3_RIG_MAX_BONES))))
+(define *skate3-rig-pose* (the-as (inline-array matrix) (malloc 'global (* 64 SKATE3_RIG_MAX_BONES))))
+;; Bones in the rig the engine was given; 0 until a setup succeeds.
+(define *skate3-rig-count* 0)
+(define *skate3-trick-name* (new 'global 'string 64 (the-as string #f)))
+(define *skate3-hud-string* (new 'global 'string 128 (the-as string #f)))
+;; The trick counter when the name was last shown, and when that was.
+(define *skate3-hud-tricks* 0)
+(define *skate3-hud-trick-time* (the-as time-frame 0))
+(define *jak3-skate3-bridge-hud* #t)
+
+;; The world handed to the engine is a square of 5 x 5 cells around Jak. Each
+;; cell is one collide-cache fill, which holds at most 461 triangles.
+(defconstant SKATE3_WORLD_CELLS 5)
+(defconstant SKATE3_WORLD_CELL_SIZE (meters 8))
+(defconstant SKATE3_WORLD_HALF_HEIGHT (meters 12))
+;; Gather again once Jak is this far from the centre of the last gather.
+(defconstant SKATE3_WORLD_REFRESH_DIST (meters 8))
+(define *skate3-bridge-world-center* (new 'global 'vector))
+;; Cells of the last gather that filled the collide cache and so lost triangles.
+(define *skate3-bridge-world-overflows* 0)
 
 (defun skate3-bridge-stick ((raw int) (invert symbol))
   "Byte stick axis around 128 to -1..1. The pad's vertical axes grow downward."
@@ -87,23 +144,160 @@
   (set! (-> io right-trigger) 0.0)
   (none))
 
+(defun skate3-bridge-gather-world ((center vector))
+  "Collect the background collision in a square around center for the engine.
+   Leaves it pending: an activate or a world commit puts it to use."
+  (let ((io *skate3-bridge-io*)
+        (cquery (new 'stack-no-clear 'collide-query))
+        (half (* 0.5 (the float SKATE3_WORLD_CELLS) SKATE3_WORLD_CELL_SIZE)))
+    (set! (-> io command) 3)
+    (pc-skate3-bridge io)
+    (set! (-> cquery collide-with) (collide-spec backgnd))
+    (set! (-> cquery ignore-process0) #f)
+    (set! (-> cquery ignore-process1) #f)
+    (set! (-> cquery ignore-pat)
+          (new 'static 'pat-surface :noentity #x1 :nojak #x1 :probe #x1 :noendlessfall #x1))
+    (set! (-> cquery action-mask) (collide-action solid))
+    (set! *skate3-bridge-world-overflows* 0)
+    (dotimes (ix SKATE3_WORLD_CELLS)
+      (dotimes (iz SKATE3_WORLD_CELLS)
+        (let ((x0 (+ (- (-> center x) half) (* (the float ix) SKATE3_WORLD_CELL_SIZE)))
+              (z0 (+ (- (-> center z) half) (* (the float iz) SKATE3_WORLD_CELL_SIZE))))
+          (set-vector! (-> cquery bbox min) x0 (- (-> center y) SKATE3_WORLD_HALF_HEIGHT) z0 1.0)
+          (set-vector! (-> cquery bbox max)
+                       (+ x0 SKATE3_WORLD_CELL_SIZE)
+                       (+ (-> center y) SKATE3_WORLD_HALF_HEIGHT)
+                       (+ z0 SKATE3_WORLD_CELL_SIZE)
+                       1.0))
+        (fill-using-bounding-box *collide-cache* cquery)
+        (when (> (-> *collide-cache* num-tris) 0)
+          (if (>= (-> *collide-cache* num-tris) 461)
+              (+! *skate3-bridge-world-overflows* 1))
+          (set! (-> io world-tris) (the-as uint (-> *collide-cache* tris)))
+          (set! (-> io world-count) (the-as uint (-> *collide-cache* num-tris)))
+          (set! (-> io command) 4)
+          (pc-skate3-bridge io))))
+    (vector-copy! *skate3-bridge-world-center* center))
+  (none))
+
+(defun skate3-bridge-postbind ((draw draw-control) (nodes cspace-array) (jc joint-control))
+  "Runs after Jak's own joint animation: replace his bones with the skater's pose."
+  (when (and *jak3-skate3-bridge-active* (> *skate3-rig-count* 0))
+    (let ((count (min *skate3-rig-count* (-> nodes length)))
+          (i SKATE3_RIG_FIRST_BONE))
+      (while (< i count)
+        (let ((bone (-> nodes data i bone)))
+          (if bone
+              (matrix-copy! (-> bone transform) (-> *skate3-rig-pose* i))))
+        (+! i 1))))
+  (none))
+
+(defbehavior target-skate3-bridge-rig-pose target ()
+  "Fetch the skater's pose for the engine's latest step, to be applied by the postbind."
+  (let ((io *skate3-bridge-io*))
+    (set! (-> io command) 7)
+    (set! (-> io rig-pose) (the-as uint *skate3-rig-pose*))
+    (set! (-> io rig-count) (the-as uint *skate3-rig-count*))
+    (if (!= (pc-skate3-bridge io) 0)
+        (set! *skate3-rig-count* 0)))
+  (none))
+
+(defbehavior target-skate3-bridge-rig-setup target ()
+  "Describe Jak's skeleton to the engine so it can fit the skater's pose to it."
+  (let* ((io *skate3-bridge-io*)
+         (nodes (-> self node-list))
+         (count (min SKATE3_RIG_MAX_BONES (-> nodes length))))
+    (dotimes (i count)
+      (let ((cs (-> nodes data i))
+            (rb (-> *skate3-rig-bones* i)))
+        (cond
+          ((-> cs joint)
+           (matrix-copy! (-> rb inv-bind) (-> cs joint bind-pose))
+           (set! (-> rb name) (the-as string (-> cs joint name))))
+          (else
+           (matrix-identity! (-> rb inv-bind))
+           (set! (-> rb name) (the-as string 0))))
+        (set! (-> rb parent)
+              (if (-> cs parent)
+                  (/ (&- (the-as pointer (-> cs parent)) (the-as uint (-> nodes data 0))) 32)
+                  -1))))
+    (set! (-> io command) 6)
+    (set! (-> io rig-bones) (the-as uint *skate3-rig-bones*))
+    (set! (-> io rig-count) (the-as uint count))
+    (cond
+      ((= (pc-skate3-bridge io) 0)
+       (set! *skate3-rig-count* count)
+       (target-skate3-bridge-rig-pose)
+       (set! (-> self skel postbind-function) skate3-bridge-postbind)
+       ;; The board joint now carries a skateboard, which has no room for
+       ;; Daxter: put him back on Jak's shoulder.
+       (send-event (ppointer->process (-> self sidekick)) 'matrix 'normal))
+      (else
+       (set! *skate3-rig-count* 0))))
+  (none))
+
+(defun skate3-bridge-draw-hud ()
+  "Skate 3's own trick names and scoring, as plain text."
+  (let ((io *skate3-bridge-io*))
+    (when (!= (-> io tricks) *skate3-hud-tricks*)
+      (set! *skate3-hud-tricks* (the-as int (-> io tricks)))
+      (set! *skate3-hud-trick-time* (-> *display* real-clock frame-counter)))
+    (with-dma-buffer-add-bucket ((buf (-> (current-frame) global-buf))
+                                 (bucket-id debug-no-zbuf2))
+      (dma-buffer-add-gs-set-flusha buf
+                                    (alpha-1 (new 'static 'gs-alpha :b #x1 :d #x1))
+                                    (tex1-1 (new 'static 'gs-tex1 :mmag #x1 :mmin #x1)))
+      (when (and (> (-> io tricks) 0)
+                 (< (- (-> *display* real-clock frame-counter) *skate3-hud-trick-time*) (seconds 2.5)))
+        (draw-string-xy *skate3-trick-name* buf 256 300 (font-color yellow) (font-flags shadow kerning middle large)))
+      (when (nonzero? (-> io sequence-active))
+        (clear *skate3-hud-string*)
+        (format *skate3-hud-string* "~D x~D" (the int (-> io sequence)) (the int (-> io multiplier)))
+        (draw-string-xy *skate3-hud-string* buf 256 325 (font-color white) (font-flags shadow kerning middle)))
+      (when (> (-> io total) 0.0)
+        (clear *skate3-hud-string*)
+        (format *skate3-hud-string* "~D" (the int (-> io total)))
+        (draw-string-xy *skate3-hud-string* buf 500 20 (font-color white) (font-flags shadow kerning right)))))
+  (none))
+
+(defbehavior target-skate3-bridge-release target ()
+  "Give Jak back to the game: stop following the engine and stop posing him."
+  (when *jak3-skate3-bridge-active*
+    (set! (-> *skate3-bridge-io* command) 8)
+    (pc-skate3-bridge *skate3-bridge-io*)
+    ;; On the jetboard Daxter rides the board joint.
+    (send-event (ppointer->process (-> self sidekick)) 'matrix 'board))
+  (set! *jak3-skate3-bridge-active* #f)
+  (set! *skate3-rig-count* 0)
+  (if (= (-> self skel postbind-function) skate3-bridge-postbind)
+      (set! (-> self skel postbind-function) #f))
+  (none))
+
 (defbehavior target-skate3-bridge-activate target ()
   "Start the engine under Jak. Blocks for several seconds the first time."
+  (skate3-bridge-gather-world (-> self control trans))
   (let ((io *skate3-bridge-io*))
     (set! (-> io command) 1)
     (vector-copy! (-> io position) (-> self control trans))
     (vector-z-quaternion! (-> io forward) (-> self control quat))
+    ;; Jak is drawn larger than his model; the scale is in his bone matrices.
+    (set! (-> io unit-scale) (vector-length (-> self node-list data SKATE3_RIG_FIRST_BONE bone transform rvec)))
+    (set! (-> io trick-name) *skate3-trick-name*)
     (skate3-bridge-clear-input! io)
+    (set! *skate3-rig-count* 0)
     (set! *jak3-skate3-bridge-active* (= (pc-skate3-bridge io) 0))
+    (if *jak3-skate3-bridge-active*
+        (target-skate3-bridge-rig-setup))
     ;; A failed start turns the bridge off so it is not retried every frame.
     (if (not *jak3-skate3-bridge-active*)
         (set! *jak3-skate3-bridge-enabled* #f)))
   *jak3-skate3-bridge-active*)
 
 (defbehavior target-skate3-bridge-step target ()
-  "Run one engine step and put Jak where the engine's board is."
+  "Advance the engine and put Jak where its board is. #f if the engine failed."
   (let ((io *skate3-bridge-io*))
     (set! (-> io command) 0)
+    (set! (-> io dt) (if *jak3-skate3-bridge-scripted-input* 0.0 (seconds-per-frame)))
     (if (not *jak3-skate3-bridge-scripted-input*)
         (skate3-bridge-read-pad! io (-> self control cpad)))
     (cond
@@ -112,21 +306,57 @@
        (vector-copy! (-> self control transv) (-> io velocity))
        (forward-up-nopitch->quaternion (-> self control quat) (-> io forward) *up-vector*)
        (quaternion-copy! (-> self control quat-for-control) (-> self control quat))
-       (quaternion-copy! (-> self control dir-targ) (-> self control quat)))
+       (quaternion-copy! (-> self control dir-targ) (-> self control quat))
+       ;; A skateboard sits on the ground; the jetboard is drawn hovering.
+       (set! (-> self control draw-offset y) 0.0)
+       (if (> *skate3-rig-count* 0)
+           (target-skate3-bridge-rig-pose))
+       ;; Keep the engine's world centred on Jak. The engine builds it in the
+       ;; background and swaps it in on a later step.
+       (let ((dx (- (-> io position x) (-> *skate3-bridge-world-center* x)))
+             (dz (- (-> io position z) (-> *skate3-bridge-world-center* z)))
+             (dy (- (-> io position y) (-> *skate3-bridge-world-center* y))))
+         (when (or (> (+ (* dx dx) (* dz dz)) (* SKATE3_WORLD_REFRESH_DIST SKATE3_WORLD_REFRESH_DIST))
+                   (> (fabs dy) (* 0.5 SKATE3_WORLD_HALF_HEIGHT)))
+           (skate3-bridge-gather-world (-> io position))
+           (set! (-> io command) 5)
+           (pc-skate3-bridge io)))
+       #t)
       (else
-       (set! *jak3-skate3-bridge-active* #f)
-       (set! *jak3-skate3-bridge-enabled* #f))))
-  (none))
+       (target-skate3-bridge-release)
+       (set! *jak3-skate3-bridge-enabled* #f)
+       #f))))
 
 (defbehavior target-skate3-bridge-post target ()
-  "Called after the normal jetboard update."
+  "The jetboard's post while the bridge drives it. #f when the bridge is not
+   driving this frame and the normal jetboard post must run instead."
+  ;; Clicking both sticks together on the board switches between the jetboard
+  ;; and the skateboard.
+  (let ((pad (-> self control cpad number)))
+    (when (and (not *jak3-skate3-bridge-scripted-input*)
+               (or (and (cpad-pressed? pad l3) (cpad-hold? pad r3))
+                   (and (cpad-pressed? pad r3) (cpad-hold? pad l3))))
+      (set! *jak3-skate3-bridge-enabled* (not *jak3-skate3-bridge-enabled*))))
   (cond
     ((not *jak3-skate3-bridge-enabled*)
-     (set! *jak3-skate3-bridge-active* #f))
+     (if *jak3-skate3-bridge-active*
+         (target-skate3-bridge-release))
+     #f)
     ((not *jak3-skate3-bridge-active*)
-     (target-skate3-bridge-activate))
+     ;; The engine starts from Jak's current pose, so this frame is still his.
+     (target-skate3-bridge-activate)
+     #f)
+    ((target-skate3-bridge-step)
+     ;; Jak's own post without his movement: joints (the skater's pose is put
+     ;; on them by the postbind), touching, shadow and powerups.
+     (target-no-move-post)
+     (target-board-joint-points)
+     (if *jak3-skate3-bridge-hud*
+         (skate3-bridge-draw-hud))
+     ;; R2 still gets Jak off the board.
+     (target-board-exit-check)
+     #t)
     (else
-     (target-skate3-bridge-step)))
-  (none))
+     #f)))
 
 )

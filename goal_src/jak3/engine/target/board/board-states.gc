@@ -100,7 +100,7 @@
 
 ;; WARN: Return type mismatch object vs none.
 (defbehavior target-board-spin-check target ()
-  (#when PC_PORT (when (target-skate-eligible?) (return #f)))
+  (#when PC_PORT (when (or (target-skate-eligible?) *jak3-skate3-bridge-active*) (return #f)))
   (when (and (or (cpad-pressed? (-> self control cpad number) r1)
                  (and (cpad-hold? (-> self control cpad number) r1)
                       (time-elapsed? (-> self board spin-check-time) (seconds 0.3))
@@ -522,7 +522,7 @@
   (if (time-elapsed? (-> self state-time) (seconds 0.1))
       (target-board-smack-surface?)
       )
-  (if (and (not (#if PC_PORT (target-skate-eligible?) #f))
+  (if (and (not (#if PC_PORT (or (target-skate-eligible?) *jak3-skate3-bridge-active*) #f))
            (cpad-pressed? (-> self control cpad number) x)
            (< (vector-dot (-> self control dynam gravity-normal) (-> self control transv)) 12288.0)
            (and (< -61440.0 (vector-dot (-> self control dynam gravity-normal) (-> self control transv)))
@@ -619,7 +619,7 @@
     (target-board-exit)
     )
   :trans (behavior ()
-    (if (and (not (#if PC_PORT (target-skate-eligible?) #f))
+    (if (and (not (#if PC_PORT (or (target-skate-eligible?) *jak3-skate3-bridge-active*) #f))
              (cpad-hold? (-> self control cpad number) l1)
              (not (logtest? (-> self target-flags) (target-flags prevent-duck)))
              (not (time-elapsed? (-> self control last-time-on-surface) (-> *TARGET-bank* ground-timeout)))
@@ -627,7 +627,7 @@
         (go target-board-duck-stance)
         )
       ;; og:preserve-this - High FPS Fix
-      (when (and (not (#if PC_PORT (target-skate-eligible?) #f))
+      (when (and (not (#if PC_PORT (or (target-skate-eligible?) *jak3-skate3-bridge-active*) #f))
                (recently-pressed? x)
                (can-jump? 'board)
                )
@@ -1069,7 +1069,7 @@
             (* 0.003921569 (the float (-> *cpad-list* cpads (-> self control cpad number) abutton (abutton-idx x)))) ;; og:preserve-this abutton indexing
             )
           )
-    (when (not (#if PC_PORT (target-skate-eligible?) #f))
+    (when (not (#if PC_PORT (or (target-skate-eligible?) *jak3-skate3-bridge-active*) #f))
       (mod-var-jump #t #f (cpad-hold? (-> self control cpad number) x) (-> self control transv)))
     (vector-copy! (-> self board slow-transv) (-> self control transv))
     (set! (-> self board shock-offset) (* 0.8 (-> self board shock-offset)))
@@ -2247,14 +2247,14 @@
     )
   :exit target-board-exit
   :trans (behavior ()
-    (if (and (not (#if PC_PORT (target-skate-eligible?) #f))
+    (if (and (not (#if PC_PORT (or (target-skate-eligible?) *jak3-skate3-bridge-active*) #f))
              (cpad-hold? (-> self control cpad number) l1)
              (not (logtest? (-> self target-flags) (target-flags prevent-duck)))
              )
         (go target-board-duck-stance)
         )
     ;; og:preserve-this - High FPS Fix
-    (when (and (not (#if PC_PORT (target-skate-eligible?) #f))
+    (when (and (not (#if PC_PORT (or (target-skate-eligible?) *jak3-skate3-bridge-active*) #f))
                (recently-pressed? x)
                (can-jump? 'board)
                )

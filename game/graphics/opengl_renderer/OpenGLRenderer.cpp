@@ -1431,6 +1431,12 @@ void OpenGLRenderer::dispatch_buckets_jak3(DmaFollower dma,
       m_collide_renderer.render(&m_render_state, p);
     }
 
+    // (AI-assisted) the skateboard of the optional Skate 3 bridge, drawn with the opaque world
+    if (bucket_id + 1 == (int)jak3::BucketId::TEX_L0_ALPHA) {
+      auto p = prof.make_scoped_child("skate-board-draw");
+      m_skate_board_renderer.render(&m_render_state, p);
+    }
+
     if (bucket_id == (int)jak3::BucketId::TEX_HUD_HUD_ALPHA) {
       auto p = prof.make_scoped_child("color-filter");
       m_blit_displays->apply_color_filter(&m_render_state, p);

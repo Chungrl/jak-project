@@ -55,6 +55,9 @@ struct SharedRenderState {
 
   // including transformation, rotation, perspective
   math::Vector4f camera_matrix[4];
+  // the camera as the background shaders take it (their pc_camera uniform), for drawing
+  // other world-space geometry with the same projection
+  math::Vector4f camera_pc[4];
   math::Vector4f camera_hvdf_off;
   math::Vector4f camera_fog;
   math::Vector4f camera_pos;

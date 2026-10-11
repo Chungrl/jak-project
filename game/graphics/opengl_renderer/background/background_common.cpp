@@ -821,6 +821,11 @@ void update_render_state_from_pc_settings(SharedRenderState* state, const TfragP
       state->camera_planes[i] = data.camera.planes[i];
       state->camera_matrix[i] = data.camera.camera[i];
     }
+    const auto pc_camera = make_new_cam_mat(data.camera.rot, data.camera.perspective,
+                                            data.camera.fog.x(), data.camera.hvdf_off.z());
+    for (int i = 0; i < 4; i++) {
+      state->camera_pc[i] = pc_camera[i];
+    }
     state->camera_pos = data.camera.trans;
     state->camera_hvdf_off = data.camera.hvdf_off;
     state->camera_fog = data.camera.fog;

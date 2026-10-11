@@ -19,10 +19,12 @@
             label
             (- (the-as int (-> io tick)) *sk3-test-base-tick*)
             (-> io state) (-> io wheels) (-> io pops) (-> io landings))
-    (format 0 " bails ~D pos ~m ~m ~m speed ~m~%"
+    (format 0 " bails ~D pos ~m ~m ~m speed ~m"
             (-> io bails)
             (-> *target* control trans x) (-> *target* control trans y) (-> *target* control trans z)
-            (vector-length (-> io velocity))))
+            (vector-length (-> io velocity)))
+    (format 0 " world ~D tris ~D rails ~D grinds ~D full cells~%"
+            (-> io world-triangles) (-> io world-rails) (-> io grinds) *skate3-bridge-world-overflows*))
   (none))
 
 (defun sk3-test-script-input ((step int))

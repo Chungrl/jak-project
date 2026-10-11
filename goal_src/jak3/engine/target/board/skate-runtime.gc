@@ -20,8 +20,14 @@
                               (locked? symbol) (safe-state? symbol))
   (and enabled? (not rc?) (not locked?) safe-state?))
 
+;; Defined by skate3-bridge, which loads after this file.
+(define-extern *jak3-skate3-bridge-active* symbol)
+(define-extern *jak3-skate3-bridge-scripted-input* symbol)
+
 (defun skate-runtime-camera-owned? ()
-  (and *jak3-skate-enabled* (-> *jak3-skate-state* active?)))
+  "The right stick does tricks, not the camera, while either skate system has it."
+  (or (and *jak3-skate-enabled* (-> *jak3-skate-state* active?))
+      (and *jak3-skate3-bridge-active* (not *jak3-skate3-bridge-scripted-input*))))
 
 (defun skate-runtime-reset! ()
   (set! (-> *jak3-skate-state* active?) #f)

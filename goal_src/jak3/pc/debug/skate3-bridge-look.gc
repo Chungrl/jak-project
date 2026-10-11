@@ -1,0 +1,79 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Manual visual check of the Skate 3 bridge. Not part of any DGO.
+;; Loaded the same way as skate3-bridge-test.gc. Mounts the jetboard, enables
+;; the bridge with scripted input and saves screenshots named sk3-*.png to the
+;; user screenshots folder, for comparing how Jak sits on the board.
+
+(defun sk3-shot ((name string))
+  (set! (-> *screen-shot-settings* width) 1920)
+  (set! (-> *screen-shot-settings* height) 1080)
+  (set! (-> *screen-shot-settings* msaa) 4)
+  (copyn-charp<-string (-> *screen-shot-settings* name) name 244)
+  (pc-screen-shot)
+  (none))
+
+(defun sk3-look-log ((label string))
+  (format 0 "SK3TEST ~S target ~A trans-y ~m draw-offset-y ~m above-ground ~m"
+          label (-> *target* state name)
+          (-> *target* control trans y) (-> *target* control draw-offset y)
+          (target-height-above-ground))
+  (format 0 " engine state ~D wheels ~D world ~D tris~%"
+          (-> *skate3-bridge-io* state) (-> *skate3-bridge-io* wheels)
+          (-> *skate3-bridge-io* world-triangles))
+  (none))
+
+(process-spawn-function process :name "sk3-look"
+  (lambda :behavior process ()
+    (format 0 "SK3TEST begin~%")
+    (until (and *target* (!= (-> *target* next-state name) 'target-continue))
+      (suspend))
+    (dotimes (i 120) (suspend))
+    (logior! (-> *game-info* features) (game-feature board))
+    (logior! (-> *game-info* debug-features) (game-feature board))
+    (send-event *target* 'change-mode 'board #f)
+    (dotimes (i 180) (suspend))
+    (sk3-look-log "native")
+    (sk3-shot "sk3-1-native")
+    (dotimes (i 10) (suspend))
+    (set! *jak3-skate3-bridge-scripted-input* #t)
+    (skate3-bridge-clear-input! *skate3-bridge-io*)
+    (set! *jak3-skate3-bridge-enabled* #t)
+    (let ((waited 0))
+      (until (or *jak3-skate3-bridge-active* (not *jak3-skate3-bridge-enabled*) (> waited 600))
+        (+! waited 1)
+        (suspend)))
+    (cond
+      ((not *jak3-skate3-bridge-active*)
+       (format 0 "SK3TEST FAILED bridge did not activate, status ~D~%" (-> *skate3-bridge-io* status)))
+      (else
+       (dotimes (i 120) (suspend))
+       (sk3-look-log "idle")
+       (sk3-shot "sk3-2-idle")
+       (dotimes (i 10) (suspend))
+       (set! (-> *skate3-bridge-io* buttons) (the-as uint #x1000))
+       (dotimes (i 150) (suspend))
+       (sk3-look-log "push")
+       (sk3-shot "sk3-3-push")
+       (dotimes (i 10) (suspend))
+       (skate3-bridge-clear-input! *skate3-bridge-io*)
+       (dotimes (i 60) (suspend))
+       ;; Flickit ollie: right stick down, then up
+       (set! (-> *skate3-bridge-io* right-y) -1.0)
+       (dotimes (i 9) (suspend))
+       (sk3-shot "sk3-4-crouch")
+       (set! (-> *skate3-bridge-io* right-y) 1.0)
+       (dotimes (i 5) (suspend))
+       (skate3-bridge-clear-input! *skate3-bridge-io*)
+       (dotimes (i 26) (suspend))
+       (sk3-look-log "air")
+       (sk3-shot "sk3-5-air")
+       (dotimes (i 90) (suspend))
+       (sk3-look-log "landed")
+       (sk3-shot "sk3-6-landed")
+       (dotimes (i 10) (suspend))))
+    (set! *jak3-skate3-bridge-enabled* #f)
+    (set! *jak3-skate3-bridge-scripted-input* #f)
+    (format 0 "SK3TEST done~%"))
+  :to *display-pool*)

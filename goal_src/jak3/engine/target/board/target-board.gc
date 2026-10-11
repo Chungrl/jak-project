@@ -1024,7 +1024,8 @@
                (case (-> self next-state name)
                  (('target-board-clone-anim 'target-board-hit 'target-board-get-off) #t)
                  (else #f)))
-      (skate-runtime-reset!)))
+      (skate-runtime-reset!)
+      (target-skate3-bridge-release)))
   (when (not (and (-> self next-state)
                   (let ((v1-3 (-> self next-state name)))
                     (or (= v1-3 'target-board-stance)
@@ -1051,7 +1052,7 @@
                     )
                   )
              )
-    (#when PC_PORT (skate-runtime-reset!))
+    (#when PC_PORT (skate-runtime-reset!) (target-skate3-bridge-release))
     (set! (-> self board latch?) #f)
     (mode-set! (-> self board main) (joint-mod-mode flex-blend))
     (mode-set! (-> self board upper-body) (joint-mod-mode flex-blend))
@@ -3069,8 +3070,10 @@
   )
 
 (defbehavior target-board-post target ()
-  (target-board-real-post)
-  (#when PC_PORT (target-skate3-bridge-post))
+  ;; (AI-assisted) while the Skate 3 bridge drives the board it replaces the
+  ;; jetboard's own movement update for the frame.
+  (if (not (#if PC_PORT (target-skate3-bridge-post) #f))
+      (target-board-real-post))
   (none)
   )
 

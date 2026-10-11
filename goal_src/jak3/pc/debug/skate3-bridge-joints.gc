@@ -1,0 +1,33 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Manual check: prints Jak's skeleton (joint names, parents, bind
+;; pose and current bone positions) to the gk console. Not part of any DGO.
+
+(process-spawn-function process :name "sk3-joints"
+  (lambda :behavior process ()
+    (format 0 "SK3TEST begin~%")
+    (until (and *target* (!= (-> *target* next-state name) 'target-continue))
+      (suspend))
+    (dotimes (i 120) (suspend))
+    (let* ((nodes (-> *target* node-list))
+           (root (-> *target* control trans)))
+      (format 0 "SK3TEST joints ~D state ~A~%" (-> nodes length) (-> *target* state name))
+      (dotimes (i (-> nodes length))
+        (let* ((cs (-> nodes data i))
+               (jnt (-> cs joint))
+               (parent (if (-> cs parent)
+                           (/ (&- (the-as pointer (-> cs parent)) (the-as uint (-> nodes data 0))) 32)
+                           -1)))
+          (format 0 "SK3JOINT ~D parent ~D name ~A" i parent (if jnt (-> jnt name) #f))
+          (if jnt
+              (format 0 " bind-trans ~m ~m ~m"
+                      (-> jnt bind-pose trans x) (-> jnt bind-pose trans y) (-> jnt bind-pose trans z)))
+          (if (-> cs bone)
+              (format 0 " bone ~m ~m ~m"
+                      (- (-> cs bone transform trans x) (-> root x))
+                      (- (-> cs bone transform trans y) (-> root y))
+                      (- (-> cs bone transform trans z) (-> root z))))
+          (format 0 "~%"))))
+    (format 0 "SK3TEST done~%"))
+  :to *display-pool*)
