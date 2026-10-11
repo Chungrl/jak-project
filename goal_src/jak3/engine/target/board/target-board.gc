@@ -1209,6 +1209,19 @@
           (set! f0-28 0.0)
           (set! f1-23 0.0)
           )
+        (#when PC_PORT
+          ;; Keep air, duck, tricks, rails, halfpipes and RC controls original.
+          ;; Skip the helper entirely by default, preserving original arithmetic.
+          (when *jak3-nextgen-board-coast*
+            (set! f0-28
+                  (board-nextgen-thrust
+                    f0-28
+                    (and (board-on-ground?)
+                         (= (-> self control ground-pat mode) (pat-mode ground))
+                         (= (-> self control mod-surface) *board-walk-mods*)
+                         (not *target-rc-board-controls*)
+                         (not (-> self board stick-off)))
+                    (-> self control pad-magnitude)))))
         (when (and (not (time-elapsed? (-> self control last-time-touching-actor) (seconds 1)))
                    (>= f28-0 0.5)
                    (< (vector-dot (-> self control wall-contact-normal) (-> self control to-target-pt-xz)) -0.7)

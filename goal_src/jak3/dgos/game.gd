@@ -343,6 +343,7 @@
   "gun-dark-shot.o"
   "gun-states.o"
   "board-util.o"
+  "board-nextgen.o" ;; added: default-off movement experiment
   "target-board.o"
   "board-part.o"
   "board-states.o"

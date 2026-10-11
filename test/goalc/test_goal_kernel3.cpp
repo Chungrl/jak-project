@@ -165,3 +165,52 @@ TEST_F(Jak3KernelTest, ThrowXmm) {
   expected += "0\n";
   EXPECT_EQ(expected, result);
 }
+
+TEST_F(Jak3KernelTest, BoardNextgenDefaultsPreserveThrust) {
+  shared_compiler->runner.c->run_test_from_string(
+      "(ml \"goal_src/jak3/engine/target/board/board-nextgen.gc\")");
+  auto result = shared_compiler->runner.c->run_test_from_string(R"(
+    (printl (not *jak3-nextgen-board-coast*))
+    (printl (= (board-nextgen-thrust 51200.0 #t 0.0) 51200.0))
+    (printl (= (board-nextgen-thrust -51200.0 #t 0.0) -51200.0))
+    (printl (= (board-nextgen-thrust 0.0 #t 0.0) 0.0))
+    (printl (= (board-nextgen-thrust 51200.0 #f 0.0) 51200.0))
+    (printl (= (board-nextgen-thrust 51200.0 #t 1.0) 51200.0))
+    0
+  )");
+  EXPECT_EQ(result, (std::vector<std::string>{"#t\n#t\n#t\n#t\n#t\n#t\n0\n"}));
+}
+
+TEST_F(Jak3KernelTest, BoardNextgenCoastRequiresEligibleNeutralInput) {
+  shared_compiler->runner.c->run_test_from_string(
+      "(ml \"goal_src/jak3/engine/target/board/board-nextgen.gc\")");
+  auto result = shared_compiler->runner.c->run_test_from_string(R"(
+    (set! *jak3-nextgen-board-coast* #t)
+    (printl (= (board-nextgen-thrust 51200.0 #t 0.0) 0.0))
+    (printl (= (board-nextgen-thrust -51200.0 #t 0.0) 0.0))
+    (printl (= (board-nextgen-thrust 51200.0 #t 1.0) 51200.0))
+    (printl (= (board-nextgen-thrust 51200.0 #t 0.000001) 51200.0))
+    (printl (= (board-nextgen-thrust -51200.0 #t 0.5) -51200.0))
+    (printl (= (board-nextgen-thrust 51200.0 #f 0.0) 51200.0))
+    (set! *jak3-nextgen-board-coast* #f)
+    (printl (= (board-nextgen-thrust 51200.0 #t 0.0) 51200.0))
+    0
+  )");
+  EXPECT_EQ(result, (std::vector<std::string>{"#t\n#t\n#t\n#t\n#t\n#t\n#t\n0\n"}));
+}
+
+TEST_F(Jak3KernelTest, BoardNextgenCoastDeceleratesAtCommonFrameRates) {
+  shared_compiler->runner.c->run_test_from_string(
+      "(ml \"goal_src/jak3/engine/target/board/board-nextgen.gc\")");
+  shared_compiler->runner.c->run_test_from_string(
+      "(ml \"test/goalc/source_templates/jak3/board-nextgen-test.gc\")");
+  auto result = shared_compiler->runner.c->run_test_from_string(R"(
+    (set! *jak3-nextgen-board-coast* #t)
+    (printl (board-nextgen-coast-deceleration-test 30))
+    (printl (board-nextgen-coast-deceleration-test 60))
+    (printl (board-nextgen-coast-deceleration-test 120))
+    (set! *jak3-nextgen-board-coast* #f)
+    0
+  )");
+  EXPECT_EQ(result, (std::vector<std::string>{"#t\n#t\n#t\n0\n"}));
+}
