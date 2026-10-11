@@ -32,6 +32,7 @@ enum Command : s32 {
   kRigSetup = 6,  // `rig_count` skate3-rig-bone entries at `rig_bones`
   kRigPose = 7,   // write `rig_count` matrices to `rig_pose`
   kRelease = 8,   // stop driving the character; the session is kept for the next activate
+  kQuery = 9,     // status kOk if the bridge is configured (both environment variables set)
 };
 
 enum Status : s32 {

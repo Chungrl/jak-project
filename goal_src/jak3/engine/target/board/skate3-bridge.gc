@@ -6,8 +6,9 @@
 ;; The engine is not part of this project. gk loads it at run time from the
 ;; library named by OPENGOAL_SKATE3_DLL, with data the player converted from
 ;; their own copy of Skate 3 (OPENGOAL_SKATE3_ASSETS). See
-;; game/kernel/jak3/skate3_bridge.h. Default off; with the bridge disabled or
-;; unavailable the jetboard behaves exactly as before.
+;; game/kernel/jak3/skate3_bridge.h. With those unset the bridge stays off and
+;; the jetboard behaves exactly as before. With them set, riding the jetboard
+;; is skateboarding, and Jak is given the jetboard if he does not have it yet.
 ;;
 ;; The engine rides the level's own background collision: the triangles in a
 ;; square around Jak are gathered through the collide cache and handed over,
@@ -80,6 +81,9 @@
 
 (define *jak3-skate3-bridge-enabled* #f)
 (define *jak3-skate3-bridge-active* #f)
+;; Whether gk was started with the bridge's environment variables: 'unknown
+;; until first asked, then #t or #f.
+(define *jak3-skate3-bridge-configured* 'unknown)
 ;; When #t the pad is not read, so a test can drive the input fields directly.
 (define *jak3-skate3-bridge-scripted-input* #f)
 (define *skate3-bridge-io* (new 'global 'skate3-bridge-io))
@@ -265,11 +269,11 @@
                                     (tex1-1 (new 'static 'gs-tex1 :mmag #x1 :mmin #x1)))
       (when (and (> (-> io tricks) 0)
                  (< (- (-> *display* real-clock frame-counter) *skate3-hud-trick-time*) (seconds 2.5)))
-        (draw-string-xy *skate3-trick-name* buf 256 300 (font-color yellow) (font-flags shadow kerning middle large)))
+        (draw-string-xy *skate3-trick-name* buf 256 350 (font-color yellow) (font-flags shadow kerning middle large)))
       (when (nonzero? (-> io sequence-active))
         (clear *skate3-hud-string*)
         (format *skate3-hud-string* "~D x~D" (the int (-> io sequence)) (the int (-> io multiplier)))
-        (draw-string-xy *skate3-hud-string* buf 256 325 (font-color white) (font-flags shadow kerning middle)))
+        (draw-string-xy *skate3-hud-string* buf 256 378 (font-color white) (font-flags shadow kerning middle)))
       (when (> (-> io total) 0.0)
         (clear *skate3-hud-string*)
         (format *skate3-hud-string* "~D" (the int (-> io total)))
@@ -371,32 +375,30 @@
        #f))))
 
 (defbehavior target-skate3-bridge-on-foot target ()
-  "Called from Jak's normal post. Clicking both sticks together puts him on the
-   skateboard, unlocking the jetboard it is built on if he does not have it."
-  (let ((pad (-> self control cpad number)))
-    (when (and (not *jak3-skate3-bridge-scripted-input*)
-               (or (and (cpad-pressed? pad l3) (cpad-hold? pad r3))
-                   (and (cpad-pressed? pad r3) (cpad-hold? pad l3)))
-               (not (focus-test? self dead grabbed in-head pilot mech dark indax))
-               (not *pause-lock*))
-      (logior! (-> *game-info* features) (game-feature board))
-      (logior! (-> *game-info* debug-features) (game-feature board))
-      (set! *jak3-skate3-bridge-enabled* #t)
-      (send-event self 'change-mode 'board #f)))
+  "Called from Jak's normal post. If gk was started with the bridge configured,
+   the jetboard is a skateboard from the start, and Jak has it."
+  (when (= *jak3-skate3-bridge-configured* 'unknown)
+    (set! (-> *skate3-bridge-io* command) 9)
+    (set! *jak3-skate3-bridge-configured* (= (pc-skate3-bridge *skate3-bridge-io*) 0))
+    (if *jak3-skate3-bridge-configured*
+        (set! *jak3-skate3-bridge-enabled* #t)))
+  (when *jak3-skate3-bridge-configured*
+    (logior! (-> *game-info* features) (game-feature board))
+    (logior! (-> *game-info* debug-features) (game-feature board)))
   (none))
 
 (defbehavior target-skate3-bridge-post target ()
   "The jetboard's post while the bridge drives it. #f when the bridge is not
    driving this frame and the normal jetboard post must run instead."
-  ;; Clicking both sticks together on the board switches between the jetboard
-  ;; and the skateboard.
+  ;; On the board, holding the right stick in and clicking the left one switches
+  ;; between skateboard and jetboard. (The other order is a debug-mode camera
+  ;; shortcut.)
   (let ((pad (-> self control cpad number)))
     (when (and (not *jak3-skate3-bridge-scripted-input*)
-               (or (and (cpad-pressed? pad l3) (cpad-hold? pad r3))
-                   (and (cpad-pressed? pad r3) (cpad-hold? pad l3))))
+               (cpad-pressed? pad l3)
+               (cpad-hold? pad r3))
       (set! *jak3-skate3-bridge-enabled* (not *jak3-skate3-bridge-enabled*))
-      ;; the same press must not be seen again by the on-foot shortcut
-      (cpad-clear! pad l3 r3)))
+      (cpad-clear! pad l3)))
   (cond
     ((not *jak3-skate3-bridge-enabled*)
      (if *jak3-skate3-bridge-active*

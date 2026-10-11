@@ -17,7 +17,9 @@ that engine or from Skate 3 is in this repository.
    - `OPENGOAL_SKATE3_DLL`: full path to `skate_ffi.dll`
    - `OPENGOAL_SKATE3_ASSETS`: full path to that `assets` folder
 
-With either variable unset the game behaves exactly as before.
+With either variable unset the game behaves exactly as before. With both set,
+riding the jetboard is skateboarding, and Jak is given the jetboard if he does
+not have it yet.
 
 The build and conversion steps used on the development machine are recorded in
 [README.md](README.md).
@@ -26,22 +28,22 @@ The build and conversion steps used on the development machine are recorded in
 
 | Pad | Does |
 | --- | --- |
-| Click both sticks together | On foot: get on the skateboard. On the board: switch between skateboard and jetboard |
+| R2, on foot | Get on the board (the jetboard's own button) |
+| Triangle, on the board | Get off |
+| Hold the right stick in, click the left stick | On the board: switch between skateboard and jetboard |
 | Left stick | Steer, lean |
 | Right stick | Flickit: pull down then flick up to ollie; other flicks are Skate 3's tricks |
 | Cross | Push (Skate 3's A button) |
 | Square, Circle | Passed through as Skate 3's X and B buttons |
 | L2, R2 | Passed through as Skate 3's triggers (its grabs) |
 | L1, R1, D-pad | Passed through as Skate 3's bumpers and D-pad (L1 + D-pad is its session marker) |
-| Triangle | Get off the board |
 
-Only the stick clicks, the right-stick ollie and kickflip, and Cross to push
-have been exercised, and those with scripted input. The other buttons are
-passed to the engine unchanged and do whatever Skate 3 does with them.
+Only the right-stick ollie and kickflip and Cross to push have been exercised,
+and those with scripted input. The other buttons are passed to the engine
+unchanged and do whatever Skate 3 does with them.
 
 The first time the skateboard is used in a session the game freezes for about
-ten seconds while the engine loads. Getting on the skateboard unlocks the
-jetboard it is built on, if Jak does not have it yet.
+ten seconds while the engine loads.
 
 Trick names and Skate 3's score are shown as plain text; set
 `*jak3-skate3-bridge-hud*` to `#f` in a REPL to hide them.

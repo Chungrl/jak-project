@@ -1081,6 +1081,11 @@ s64 pc_skate3_bridge(u32 io_ptr) {
     case kRigPose:
       do_rig_pose(io);
       break;
+    case kQuery:
+      io->status = (env("OPENGOAL_SKATE3_DLL").empty() || env("OPENGOAL_SKATE3_ASSETS").empty())
+                       ? kUnavailable
+                       : kOk;
+      break;
     case kRelease:
       set_board_visible(false);
       g_engine.active = false;
