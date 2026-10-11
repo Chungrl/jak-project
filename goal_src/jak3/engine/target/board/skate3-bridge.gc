@@ -421,6 +421,14 @@
      (target-skate3-bridge-activate)
      #f)
     ((target-skate3-bridge-step)
+     ;; The jetboard's states put Daxter on the board joint whenever they like
+     ;; (getting on, landing a trick). That joint now carries a skateboard with
+     ;; no room for him, so keep him on Jak's shoulder.
+     (let ((sidekick (ppointer->process (-> self sidekick))))
+       (if (and sidekick
+                (= (-> (the-as process-drawable sidekick) node-list data 0 param1)
+                   (-> self node-list data 37)))
+           (send-event sidekick 'matrix 'normal)))
      ;; Jak's own post without his movement: joints (the skater's pose is put
      ;; on them by the postbind), touching, shadow and powerups.
      (target-no-move-post)
