@@ -1,0 +1,22 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Exercise the production thrust helper in the existing board-add-thrust
+;; longitudinal update: add thrust * dt, then apply the original damping.
+;; This isolated flat-ground calculation does not simulate collision, slopes,
+;; state transitions or input processing. Explicit Euler damping is not exactly
+;; frame invariant; check positive, strictly decreasing speed at each rate.
+(defun board-nextgen-coast-deceleration-test ((fps int))
+  (let ((dt (/ 1.0 (the float fps)))
+        (speed 81920.0)
+        (seek 51200.0)
+        (target-speed 102400.0)
+        (monotonic? #t))
+    (dotimes (frame fps)
+      (let* ((old-speed speed)
+             (thrust (board-nextgen-thrust seek #t 0.0))
+             (damping (- 1.0 (/ (* seek dt) target-speed))))
+        (set! speed (* (+ speed (* thrust dt)) damping))
+        (unless (and (> speed 0.0) (< speed old-speed))
+          (set! monotonic? #f))))
+    (and monotonic? (> speed 0.0) (< speed 81920.0))))

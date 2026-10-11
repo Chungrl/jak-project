@@ -1,0 +1,16 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Jak 3: Next Generation lab. No persistent settings or layout changes.
+(#when PC_PORT
+
+(define *jak3-nextgen-board-coast* #f)
+
+(defun board-nextgen-thrust ((thrust float) (normal-ground? symbol) (pad-magnitude float))
+  "Remove powered thrust on neutral ordinary ground; retain the existing drag."
+  ;; Use the existing input dead zone. Any nonzero input keeps original thrust.
+  (if (and *jak3-nextgen-board-coast* normal-ground? (= pad-magnitude 0.0))
+      0.0
+      thrust))
+
+)
