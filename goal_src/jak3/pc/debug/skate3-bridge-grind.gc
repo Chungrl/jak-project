@@ -1,0 +1,137 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Manual check: looks for a grind. Asks the engine where the
+;; grind rails it found around Jak are (this needs an engine library built with
+;; the local sk_debug_rail addition), then for each long, level rail restarts
+;; the skater just above one end, moving along it, and reports whenever the
+;; engine says the board is grinding (physical state in the 400s, or its grind
+;; counter going up). Not part of any DGO.
+
+(define *sk3g-phase* 0)   ;; 0 mount, 1 wait for the bridge, 2 pick a rail, 3 watch, 4 finished
+(define *sk3g-timer* 0)
+(define *sk3g-rail* 0)
+(define *sk3g-rails* 0)
+(define *sk3g-tried* 0)
+(define *sk3g-grinds* 0)
+(define *sk3g-found* 0)
+(define *sk3g-reported* #f)
+(define *sk3g-longest* 0)
+(define *sk3g-shot-taken* #f)
+(define *sk3g-a* (new 'global 'vector))
+(define *sk3g-b* (new 'global 'vector))
+(defconstant SK3G_MAX_TRIES 30)
+
+(defun sk3g-shot ((name string))
+  (set! (-> *screen-shot-settings* width) 1920)
+  (set! (-> *screen-shot-settings* height) 1080)
+  (set! (-> *screen-shot-settings* msaa) 4)
+  (copyn-charp<-string (-> *screen-shot-settings* name) name 244)
+  (pc-screen-shot)
+  (none))
+
+(defun sk3g-finish ()
+  (format 0 "SK3TEST grind search: ~D of ~D rails tried ground, of ~D rails near Jak; engine grind count ~D~%"
+          *sk3g-found* *sk3g-tried* *sk3g-rails* (-> *skate3-bridge-io* grinds))
+  (set! *jak3-skate3-bridge-scripted-input* #f)
+  (format 0 "SK3TEST done~%")
+  (set! *sk3g-phase* 4)
+  (none))
+
+(defun sk3g-next-rail ()
+  "Find the next rail worth trying and restart the skater on it. #f when there are none left."
+  (let ((io *skate3-bridge-io*)
+        (started #f))
+    (while (and (not started) (< *sk3g-tried* SK3G_MAX_TRIES))
+      (set! (-> io command) 10)
+      (set! (-> io world-count) (the-as uint *sk3g-rail*))
+      (cond
+        ((!= (pc-skate3-bridge io) 0)
+         ;; past the last rail, or no debug support
+         (if (= *sk3g-rail* 0)
+             (format 0 "SK3TEST FAILED the engine library does not report its rails (status ~D)~%" (-> io status)))
+         (set! *sk3g-tried* SK3G_MAX_TRIES))
+        (else
+         (set! *sk3g-rails* (the-as int (-> io world-rails)))
+         (vector-copy! *sk3g-a* (-> io position))
+         (vector-copy! *sk3g-b* (-> io velocity))
+         (let* ((dir (vector-! (new 'stack-no-clear 'vector) *sk3g-b* *sk3g-a*))
+                (len (vector-length dir)))
+           ;; long enough to ride and close to level
+           (when (and (> len (meters 2.5)) (< (fabs (-> dir y)) (* 0.15 len)))
+             (vector-float*! dir dir (/ 1.0 len))
+             (set! (-> dir y) 0.0)
+             (vector-normalize! dir 1.0)
+             (vector+float*! *skate3-bridge-restart-pos* *sk3g-a* dir (meters 0.4))
+             (+! (-> *skate3-bridge-restart-pos* y) (meters 0.35))
+             (vector-copy! *skate3-bridge-restart-dir* dir)
+             (set! *skate3-bridge-restart-speed* (meters 5))
+             (set! *skate3-bridge-restart?* #t)
+             (format 0 "SK3TEST rail ~D of ~D: ~m long at ~m ~m ~m~%" *sk3g-rail* *sk3g-rails* len
+                     (-> *sk3g-a* x) (-> *sk3g-a* y) (-> *sk3g-a* z))
+             (+! *sk3g-tried* 1)
+             (set! *sk3g-reported* #f)
+             (set! *sk3g-timer* 150)
+             (set! started #t)))))
+      (+! *sk3g-rail* 1))
+    started))
+
+(defun sk3g-tick ()
+  (let ((io *skate3-bridge-io*))
+    (cond
+      ((= *sk3g-phase* 0)
+       (when (and *target* (!= (-> *target* next-state name) 'target-continue))
+         (set! *jak3-skate3-bridge-scripted-input* #t)
+         (skate3-bridge-clear-input! io)
+         (send-event *target* 'change-mode 'board #f)
+         (set! *sk3g-phase* 1)
+         (set! *sk3g-timer* 0)))
+      ((= *sk3g-phase* 1)
+       (+! *sk3g-timer* 1)
+       (cond
+         ((and *jak3-skate3-bridge-active* (> *sk3g-timer* 120))
+          (set! *sk3g-grinds* (the-as int (-> io grinds)))
+          (set! *sk3g-rail* 0)
+          (set! *sk3g-phase* 2))
+         ((> *sk3g-timer* 1500)
+          (format 0 "SK3TEST FAILED bridge did not activate~%")
+          (set! *sk3g-phase* 4))))
+      ((= *sk3g-phase* 2)
+       (if (sk3g-next-rail)
+           (set! *sk3g-phase* 3)
+           (sk3g-finish)))
+      ((= *sk3g-phase* 3)
+       (let ((grinding (and (>= (-> io state) 400) (< (-> io state) 500))))
+         (when (and (not *sk3g-reported*)
+                    (or grinding (!= (the-as int (-> io grinds)) *sk3g-grinds*)))
+           (set! *sk3g-reported* #t)
+           (set! *sk3g-grinds* (the-as int (-> io grinds)))
+           (+! *sk3g-found* 1)
+           (set! *sk3g-longest* 0)
+           (format 0 "SK3TEST GRIND on rail ~D: state ~D grinds ~D trick ~S" (+ *sk3g-rail* -1)
+                   (-> io state) (-> io grinds) *skate3-trick-name*)
+           (format 0 " pos ~m ~m ~m~%" (-> io position x) (-> io position y) (-> io position z)))
+         (when grinding
+           (+! *sk3g-longest* 1)
+           ;; a picture a third of a second into the first grind that lasts that long
+           (when (and (not *sk3g-shot-taken*) (= *sk3g-longest* 20))
+             (set! *sk3g-shot-taken* #t)
+             (sk3g-shot "sk3-g-grind"))))
+       (+! *sk3g-timer* -1)
+       (when (<= *sk3g-timer* 0)
+         (if *sk3g-reported*
+             (format 0 "SK3TEST   ground for ~D frames, trick ~S, total ~D~%" *sk3g-longest* *skate3-trick-name*
+                     (the int (-> io total))))
+         (set! *sk3g-phase* 2)))))
+  (none))
+
+(set! *sk3g-phase* 0)
+(set! *sk3g-found* 0)
+(set! *sk3g-tried* 0)
+(format 0 "SK3TEST begin~%")
+(process-spawn-function process :name "sk3-grind"
+  (lambda :behavior process ()
+    (loop
+      (sk3g-tick)
+      (suspend)))
+  :to *display-pool*)

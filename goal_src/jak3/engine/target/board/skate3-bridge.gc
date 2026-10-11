@@ -84,6 +84,13 @@
 ;; Whether gk was started with the bridge's environment variables: 'unknown
 ;; until first asked, then #t or #f.
 (define *jak3-skate3-bridge-configured* 'unknown)
+;; For checks and tools: set the position and facing, then the flag, and the
+;; skater is restarted there on the next frame the bridge drives.
+(define *skate3-bridge-restart?* #f)
+(define *skate3-bridge-restart-pos* (new 'global 'vector))
+(define *skate3-bridge-restart-dir* (new 'global 'vector))
+;; Speed along that facing to restart with, in units per second; 0 for a standstill.
+(define *skate3-bridge-restart-speed* 0.0)
 ;; Set while the bridge has stepped aside because Jak is in deep water, which the
 ;; jetboard can cross and a skateboard cannot. It comes back once he is out.
 (define *jak3-skate3-bridge-in-water* #f)
@@ -273,7 +280,7 @@
                                     (tex1-1 (new 'static 'gs-tex1 :mmag #x1 :mmin #x1)))
       (when (and (> (-> io tricks) 0)
                  (< (- (-> *display* real-clock frame-counter) *skate3-hud-trick-time*) (seconds 2.5)))
-        (draw-string-xy *skate3-trick-name* buf 256 350 (font-color yellow) (font-flags shadow kerning middle large)))
+        (draw-string-xy *skate3-trick-name* buf 256 350 (font-color yellow) (font-flags shadow kerning middle)))
       (when (nonzero? (-> io sequence-active))
         (clear *skate3-hud-string*)
         (format *skate3-hud-string* "~D x~D" (the int (-> io sequence)) (the int (-> io multiplier)))
@@ -420,7 +427,21 @@
      ;; The engine starts from Jak's current pose, so this frame is still his.
      (target-skate3-bridge-activate)
      #f)
-    ((target-skate3-bridge-step)
+    ((begin
+       (when *skate3-bridge-restart?*
+         (set! *skate3-bridge-restart?* #f)
+         (move-to-point! (-> self control) *skate3-bridge-restart-pos*)
+         (forward-up-nopitch->quaternion (-> self control quat) *skate3-bridge-restart-dir* *up-vector*)
+         (when (and (target-skate3-bridge-activate) (> *skate3-bridge-restart-speed* 0.0))
+           (vector-float*! (-> *skate3-bridge-io* velocity) *skate3-bridge-restart-dir* *skate3-bridge-restart-speed*)
+           (set! (-> *skate3-bridge-io* command) 11)
+           (pc-skate3-bridge *skate3-bridge-io*)))
+       (and *jak3-skate3-bridge-active* (target-skate3-bridge-step)))
+     ;; The jetboard's get-on state waits on the jetboard's own movement, which
+     ;; is not running, and would otherwise never finish.
+     (if (and (= (-> self state name) 'target-board-get-on)
+              (time-elapsed? (-> self state-time) (seconds 0.5)))
+         (go target-board-stance))
      ;; The jetboard's states put Daxter on the board joint whenever they like
      ;; (getting on, landing a trick). That joint now carries a skateboard with
      ;; no room for him, so keep him on Jak's shoulder.

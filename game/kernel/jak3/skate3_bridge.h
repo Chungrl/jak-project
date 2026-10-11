@@ -33,6 +33,11 @@ enum Command : s32 {
   kRigPose = 7,   // write `rig_count` matrices to `rig_pose`
   kRelease = 8,   // stop driving the character; the session is kept for the next activate
   kQuery = 9,     // status kOk if the bridge is configured (both environment variables set)
+  // For checks. kDebugRail needs an engine library that exports sk_debug_rail (a local
+  // addition to the wrapper); with a stock library it reports kUnavailable.
+  kDebugRail = 10,    // the longest segment of grind rail `world_count`: its ends are written
+                      // to `position` and `velocity`, and the number of rails to `world_rails`
+  kSetVelocity = 11,  // give the board and skater the velocity in `velocity` (units per second)
 };
 
 enum Status : s32 {

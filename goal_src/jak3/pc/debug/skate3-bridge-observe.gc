@@ -1,0 +1,42 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Manual check: watches the Skate 3 bridge while someone (or a
+;; key-press script) plays, and prints its state twice a second for a while.
+;; It injects no input of its own. Not part of any DGO. Keyboard input is
+;; switched on so the default key bindings reach the pad (P is R2, Space is
+;; Cross, R is Triangle, I/J/K/L the right stick, W/A/S/D the left stick,
+;; comma and full stop the stick clicks).
+
+(define *sk3o-frame* 0)
+(define *sk3o-frames* 3000)
+
+(defun sk3o-tick ()
+  (when (and *target* (<= *sk3o-frame* *sk3o-frames*))
+    (when (= (mod *sk3o-frame* 30) 0)
+      (let ((io *skate3-bridge-io*))
+        (format 0 "SK3TEST obs ~D target ~A enabled ~A active ~A water ~A"
+                (/ *sk3o-frame* 30) (-> *target* state name)
+                *jak3-skate3-bridge-enabled* *jak3-skate3-bridge-active* *jak3-skate3-bridge-in-water*)
+        (format 0 " state ~D pops ~D grinds ~D" (-> io state) (-> io pops) (-> io grinds))
+        (format 0 " tricks ~D ~S total ~D speed ~m"
+                (-> io tricks) *skate3-trick-name* (the int (-> io total))
+                (vector-length (-> io velocity)))
+        (format 0 " pos ~m ~m ~m"
+                (-> *target* control trans x) (-> *target* control trans y) (-> *target* control trans z))
+        (format 0 " pad #x~X lx ~f ly ~f rx ~f ry ~f~%"
+                (-> io buttons) (-> io left-x) (-> io left-y) (-> io right-x) (-> io right-y))))
+    (if (= *sk3o-frame* *sk3o-frames*)
+        (format 0 "SK3TEST done~%"))
+    (+! *sk3o-frame* 1))
+  (none))
+
+(set! *sk3o-frame* 0)
+(pc-set-keyboard-enabled! #t)
+(format 0 "SK3TEST begin~%")
+(process-spawn-function process :name "sk3-observe"
+  (lambda :behavior process ()
+    (loop
+      (sk3o-tick)
+      (suspend)))
+  :to *display-pool*)

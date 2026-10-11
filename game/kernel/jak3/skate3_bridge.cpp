@@ -214,6 +214,10 @@ struct Engine {
   float(__cdecl* step_period)(SkSession*) = nullptr;
   int(__cdecl* board_mesh)(SkSession*, SkBoardSurface*, u32) = nullptr;
   int(__cdecl* board_pose)(SkSession*, float*, u32) = nullptr;
+  int(__cdecl* set_velocity)(SkSession*, const float*) = nullptr;
+  // optional: only in a wrapper built with the local debug additions
+  int(__cdecl* debug_rail_count)() = nullptr;
+  int(__cdecl* debug_rail)(u32, float*, u32) = nullptr;
   int(__cdecl* activate)(SkSession*, const float*, float) = nullptr;
   int(__cdecl* step)(SkSession*, const SkControls*) = nullptr;
   int(__cdecl* get_pose)(SkSession*, SkPose*) = nullptr;
@@ -268,6 +272,11 @@ bool load_library() {
   ok = resolve(g_engine.step_period, "sk_period") && ok;
   ok = resolve(g_engine.board_mesh, "sk_board_mesh") && ok;
   ok = resolve(g_engine.board_pose, "sk_board_pose") && ok;
+  ok = resolve(g_engine.set_velocity, "sk_set_velocity") && ok;
+  g_engine.debug_rail_count =
+      (int(__cdecl*)())GetProcAddress(g_engine.library, "sk_debug_rail_count");
+  g_engine.debug_rail =
+      (int(__cdecl*)(u32, float*, u32))GetProcAddress(g_engine.library, "sk_debug_rail");
   ok = resolve(g_engine.activate, "sk_activate") && ok;
   ok = resolve(g_engine.step, "sk_step") && ok;
   ok = resolve(g_engine.get_pose, "sk_get_pose") && ok;
@@ -568,6 +577,12 @@ void do_activate(BridgeIO* io) {
       lg::error("[skate3] the engine did not start: {}", engine_error());
       io->status = kEngineError;
       return;
+    }
+    // Starting a session does not look for grind rails in its collision; installing the
+    // same world does.
+    if (!g_engine.world.empty() &&
+        g_engine.install_world(g_engine.session, ground, ground_count) < 0) {
+      lg::warn("[skate3] installing the first world failed: {}", engine_error());
     }
   } else if (g_engine.install_world(g_engine.session, ground, ground_count) < 0) {
     lg::error("[skate3] installing the ground failed: {}", engine_error());
@@ -986,6 +1001,53 @@ void do_rig_pose(BridgeIO* io) {
   io->status = kOk;
 }
 
+void do_debug_rail(BridgeIO* io) {
+  if (!g_engine.session || !g_engine.debug_rail || !g_engine.debug_rail_count) {
+    io->status = kUnavailable;
+    return;
+  }
+  const int rails = g_engine.debug_rail_count();
+  io->world_rails = rails > 0 ? (u32)rails : 0;
+  float points[64 * 3];
+  const int count = g_engine.debug_rail(io->world_count, points, 64);
+  if (count < 2) {
+    io->status = kBadCommand;
+    return;
+  }
+  // the longest straight piece of the rail
+  int best = 0;
+  float best_length = -1.f;
+  for (int i = 0; i + 1 < std::min(count, 64); i++) {
+    float d[3];
+    vec_sub(&points[(i + 1) * 3], &points[i * 3], d);
+    const float length = vec_dot(d, d);
+    if (length > best_length) {
+      best_length = length;
+      best = i;
+    }
+  }
+  host_to_game(&points[best * 3], io->position);
+  io->position[3] = 1.f;
+  host_to_game(&points[(best + 1) * 3], io->velocity);
+  io->velocity[3] = 1.f;
+  io->status = kOk;
+}
+
+void do_set_velocity(BridgeIO* io) {
+  if (!g_engine.session || !g_engine.active) {
+    io->status = kNotActive;
+    return;
+  }
+  float host[3];
+  game_to_host(io->velocity, host);
+  if (g_engine.set_velocity(g_engine.session, host) != 0) {
+    lg::error("[skate3] setting the velocity failed: {}", engine_error());
+    io->status = kEngineError;
+    return;
+  }
+  io->status = kOk;
+}
+
 s16 stick(float value) {
   return (s16)(std::clamp(value, -1.f, 1.f) * 32767.f);
 }
@@ -1085,6 +1147,12 @@ s64 pc_skate3_bridge(u32 io_ptr) {
       io->status = (env("OPENGOAL_SKATE3_DLL").empty() || env("OPENGOAL_SKATE3_ASSETS").empty())
                        ? kUnavailable
                        : kOk;
+      break;
+    case kDebugRail:
+      do_debug_rail(io);
+      break;
+    case kSetVelocity:
+      do_set_velocity(io);
       break;
     case kRelease:
       set_board_visible(false);
