@@ -1,0 +1,32 @@
+**Audit limit:** the local shell failed before running any command, so I could not verify the checkout’s HEAD or untracked files. The source citations below are from the public `andrewnakas/SK8-Engine` default branch. Treat differences from the local checkout as unverified.
+
+## 1. WHAT IT IS
+
+This is a **C++23, CMake-built Skate 3 executable**, with ReXGlue as a submodule. CMake builds `skate3`, generates C++ from the user’s retail XEX files, and links that generated code into the executable ([CMakeLists.txt:14–24](https://github.com/andrewnakas/SK8-Engine/blob/main/CMakeLists.txt#L14-L24), [338–357](https://github.com/andrewnakas/SK8-Engine/blob/main/CMakeLists.txt#L338-L357), [CodegenTargets.cmake:1–32](https://github.com/andrewnakas/SK8-Engine/blob/main/cmake/CodegenTargets.cmake#L1-L32)). There is no Rust crate. Of roughly **33,000 lines in the listed `.cpp` files**, I found **zero standalone gameplay simulation lines**; approximately 28,000 concern native rendering and guest-state reading. Retail gameplay code is generated outside the tracked source. The public branch’s latest commit was **24 July 2026**; local last-commit activity is unverified. The source has an installer and boot path, but playability was not tested here. Gameplay tests or parity fixtures: **not found**.
+
+## 2. PROVENANCE OF GAMEPLAY LOGIC
+
+| Subsystem | Classification and source evidence |
+| --- | --- |
+| Flickit input and trick selection | **(a) Retail executable via recompilation.** The project’s input code gates or polls ReXGlue’s gamepad input; it does not implement gesture or trick recognition ([skate3_app_common.cpp:747–761](https://github.com/andrewnakas/SK8-Engine/blob/main/src/skate3_app_common.cpp#L747-L761), [904–928](https://github.com/andrewnakas/SK8-Engine/blob/main/src/skate3_app_common.cpp#L904-L928)). |
+| Board physics/integration, grinding, manuals, pushing/carving, bails, animation selection | **(a) At the architecture level:** these are not identifiable as independent implementations in the tracked build sources; the game is generated from `default.xex` ([skate3.toml.in:1–9](https://github.com/andrewnakas/SK8-Engine/blob/main/manifests/skate3.toml.in#L1-L9), [CodegenTargets.cmake:1–10](https://github.com/andrewnakas/SK8-Engine/blob/main/cmake/CodegenTargets.cmake#L1-L10)). The particular generated functions for each subsystem are **not found in-repo**, so their boundaries cannot be named. |
+
+Address ranges in [skate3_functions.toml](https://github.com/andrewnakas/SK8-Engine/blob/main/config/skate3_functions.toml#L1-L15) guide function-boundary code generation; they are not a hand-ported gameplay implementation. Evidence for categories **(b), (c), or (d)** for these systems: **not found**.
+
+## 3. PROPRIETARY CONTENT
+
+Tracked source ships manifests, address/configuration data, native renderer code, and a ReXGlue submodule reference. Generated recompilation files and `/game/` are ignored, as are ISO and XEX files ([.gitignore:1–11](https://github.com/andrewnakas/SK8-Engine/blob/main/.gitignore#L1-L11)). Building requires the user’s extracted `default.xex` and `data/webkit/EAWebkit.xex`; CMake can also take a user-supplied title-update package ([CMakeLists.txt:83–90](https://github.com/andrewnakas/SK8-Engine/blob/main/CMakeLists.txt#L83-L90), [160–189](https://github.com/andrewnakas/SK8-Engine/blob/main/CMakeLists.txt#L160-L189)). At runtime, missing game files trigger an ISO installer ([skate3_app_common.cpp:602–633](https://github.com/andrewnakas/SK8-Engine/blob/main/src/skate3_app_common.cpp#L602-L633)). Shipped EA assets, animation clips, ISO/XEX, and generated retail code: **not found**. The animation data’s specific files and format were **not established**.
+
+## 4. LICENCE
+
+A project-root `LICENSE` or `COPYING` file was **not found** on the public branch; the project code therefore has **no verified reuse grant** for linking into an ISC project. The referenced [ReXGlue submodule](https://github.com/andrewnakas/SK8-Engine/blob/main/.gitmodules#L1-L4) has a [three-clause BSD licence](https://github.com/mchughalex/rexglue-skate3/blob/skate3-sdk-clean/LICENSE#L1-L30): source and binary redistribution require notice and disclaimer retention, and names cannot endorse derivatives. That licence has no non-commercial or GPL/copyleft clause and is generally compatible with ISC. Licences for its transitive dependencies and for generated retail code were **not fully verified**; ReXGlue’s licence does not grant rights to EA code or assets.
+
+## 5. ARCHITECTURE FOR EMBEDDING
+
+A headless simulation core, public `step(input, world) -> state` API, collision-query trait, documented simulation timestep, coordinate convention, C ABI, IPC, shared-memory bridge, or host-facing pose API: **not found**. The actual integration is `Skate3BaseApp : rex::ReXApp`, initialized with generated PPC image configuration ([skate3_app_common.h:22–35](https://github.com/andrewnakas/SK8-Engine/blob/main/src/skate3_app_common.h#L22-L35), [main.cpp:43–50](https://github.com/andrewnakas/SK8-Engine/blob/main/src/main.cpp#L43-L50)). Its native renderer reads guest state ([skate3_native_guest_read.cpp:27–55](https://github.com/andrewnakas/SK8-Engine/blob/main/src/native/skate3_native_guest_read.cpp#L27-L55)); it is not an interface for Jak 3 collision or rendering. Skeleton, bone count, clip source, and retargeting API: **not found**.
+
+## 6. REUSABILITY VERDICT
+
+**Neither a drop-in library nor a ready worker.** No tracked gameplay module can be lifted into OpenGOAL with little work. The small reusable pieces are infrastructure examples, such as input routing and guest-state inspection, not Flickit or board motion. A worker would have to run the retail game environment and exchange input, world/collision information, board state, and pose each frame through a new protocol; the source exposes no suitable seam. The largest risks are proprietary-code rights, coupling to the retail world and runtime, collision substitution, timing, and retargeting. For “stick input → trick recognition → board motion” in Jak 3, budget **months of reverse engineering and new integration**, not a library port.
+
+Skipped: local HEAD verification, builds, execution, and transitive-licence inventory. Risk: the local checkout may differ from the cited public branch.
