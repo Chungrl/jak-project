@@ -90,6 +90,33 @@ halfpipe traversal, rendered animation/HUD or gameplay launch. Earlier lab and
 texture-workflow suite passes are historical and must not be counted for skating.
 No test or build was rerun during this recovery task.
 
+## Repair, 2026-10-11 (AI-assisted)
+
+The sections above describe the snapshot as recovered. Two defects were then
+repaired in `target-board.gc`; nothing else was changed.
+
+- **Build failure fixed.** The procedural deck-transform block in
+  `target-board-joint-points` was missing one closing parenthesis.
+- **Camera ownership fixed.** `target-board-exit` now calls
+  `skate-runtime-reset!` when the next state is `target-board-clone-anim`,
+  `target-board-hit` or `target-board-get-off`: board-family states whose post
+  handlers never call `target-skate-sample`.
+
+Verified in WSL Ubuntu 24.04 with a fresh Clang Release build of `goalc` and
+`goalc-test` (1,383 steps, exit 0):
+
+| Check | Result |
+| --- | --- |
+| `(make "$OUT/obj/board-states.o" :force #t)` | **Passed**: built all 360 targets |
+| `goalc-test --gtest_filter='Jak3KernelTest.*'` | **32 passed, 0 failed**, including all 25 `Skate*` tests |
+
+Still not done: no gameplay launch. `iso_data/jak3` is empty on this machine,
+so the game cannot be extracted or run, and the ownership fix is verified by
+compilation and review only, not by an in-game scripted-state transition.
+`target-board-ride-edge` is skate-eligible but its post handler does not sample
+Flickit, so the camera stick is blocked while grinding with nothing reading it;
+that belongs to the unwired grind work and was left alone.
+
 ## Known unresolved behavior and wiring limits
 
 Specialist review identified a possible stale input/camera ownership bug:

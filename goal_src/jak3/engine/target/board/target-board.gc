@@ -1016,6 +1016,15 @@
   )
 
 (defbehavior target-board-exit target ()
+  (#when PC_PORT
+    ;; (AI-assisted) These board states stay in the vanilla family below but
+    ;; their post handlers never call target-skate-sample, so nothing else
+    ;; would release the right stick back to the camera.
+    (when (and (-> self next-state)
+               (case (-> self next-state name)
+                 (('target-board-clone-anim 'target-board-hit 'target-board-get-off) #t)
+                 (else #f)))
+      (skate-runtime-reset!)))
   (when (not (and (-> self next-state)
                   (let ((v1-3 (-> self next-state name)))
                     (or (= v1-3 'target-board-stance)
@@ -1890,7 +1899,7 @@
           (let ((deck (the-as quaternion (-> self board board-quat))))
             (quaternion-rotate-local-z! deck deck (skate-trick-board-roll *skate-tricks*))
             (quaternion-rotate-local-y! deck deck (skate-trick-board-yaw *skate-tricks*))
-            (quaternion-rotate-local-x! deck deck (skate-trick-board-pitch *skate-tricks*))))
+            (quaternion-rotate-local-x! deck deck (skate-trick-board-pitch *skate-tricks*)))))
       )
     (vector-copy! (-> self board board-scale) (-> self control scale))
     (let ((a0-4 (-> *target-shadow-control* settings shadow-dir quad)))
