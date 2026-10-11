@@ -1,0 +1,328 @@
+-------- CPU Information --------
+ Brand: 
+ Model: 
+ AVX  : true
+ AVX2 : true
+ NEON : false
+[51:59:350] [[38;2;064;224;208mdebug[0m] Current executable directory - /repo/build/nextgen/goalc-test
+[51:59:350] [[38;2;064;224;208mdebug[0m] Using data path: /repo/build/nextgen/data
+Note: Google Test filter = Jak3KernelTest.Skate*
+[==========] Running 25 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 25 tests from Jak3KernelTest
+[51:59:531] [[38;2;064;224;208mdebug[0m] Loaded project goal_src/jak3/game.gp with 3520 steps in 146 ms
+
+Building kernel...
+Successfully found all 9 dependencies for target in 0.000s
+Found that 9 of 9 targets do need rebuilding in 0.000s
+Building 9 targets...
+[ 11%] [goalc   ]       goal_src/jak3/kernel/gcommon.gc                                       [ 11%] [goalc   ] 0.035 goal_src/jak3/kernel/gcommon.gc                                       
+[ 22%] [goalc   ]       goal_src/jak3/kernel/gstring-h.gc                                     [ 22%] [goalc   ] 0.000 goal_src/jak3/kernel/gstring-h.gc                                     
+[ 33%] [goalc   ]       goal_src/jak3/kernel/gkernel-h.gc                                     [ 33%] [goalc   ] 0.014 goal_src/jak3/kernel/gkernel-h.gc                                     
+[ 44%] [goalc   ]       goal_src/jak3/kernel/gkernel.gc                                       [ 44%] [goalc   ] 0.049 goal_src/jak3/kernel/gkernel.gc                                       
+[ 56%] [goalc   ]       goal_src/jak3/kernel/pskernel.gc                                      [ 56%] [goalc   ] 0.000 goal_src/jak3/kernel/pskernel.gc                                      
+[ 67%] [goalc   ]       goal_src/jak3/kernel/gstring.gc                                       [ 67%] [goalc   ] 0.020 goal_src/jak3/kernel/gstring.gc                                       
+[ 78%] [goalc   ]       goal_src/jak3/kernel/dgo-h.gc                                         [ 78%] [goalc   ] 0.001 goal_src/jak3/kernel/dgo-h.gc                                         
+[ 89%] [goalc   ]       goal_src/jak3/kernel/gstate.gc                                        [ 89%] [goalc   ] 0.006 goal_src/jak3/kernel/gstate.gc                                        
+[100%] [dgo     ]       goal_src/jak3/dgos/kernel.gd                                          [100%] [dgo     ] 0.000 goal_src/jak3/dgos/kernel.gd                                          
+
+Successfully built all 9 targets in 0.127s
+Starting GOAL Kernel...
+[51:59:660] [[38;2;064;224;208mdebug[0m] # Initialize IOP...
+[51:59:660] [[38;2;064;224;208mdebug[0m] [IOP] Restart!
+[51:59:661] [[38;2;064;224;208mdebug[0m] # IOP initialized
+[51:59:661] [[38;2;064;224;208mdebug[0m] [IOP] Wait for OVERLORD to start...
+[51:59:661] [[38;2;064;224;208mdebug[0m] # Initialize DMP...
+[51:59:674] [[38;2;064;224;208mdebug[0m] # DMP initialized
+[51:59:674] [[38;2;064;224;208mdebug[0m] [DECI2] Waiting for EE to register protos
+[51:59:674] [[38;2;064;224;208mdebug[0m] # Initialize EE-Worker...
+[51:59:674] [[38;2;064;224;208mdebug[0m] # EE-Worker initialized
+[51:59:674] [[38;2;064;224;208mdebug[0m] # Initialize EE...
+[51:59:674] [[38;2;064;224;208mdebug[0m] Main memory mapped at 0x0000002123000000
+[51:59:674] [[38;2;064;224;208mdebug[0m] Main memory size 0x8000000 bytes (128.000 MB)
+[51:59:674] [[38;2;064;224;208mdebug[0m] [EE] Initialization complete!
+[51:59:674] [[38;2;064;224;208mdebug[0m] # EE initialized
+[51:59:674] [[38;2;064;224;208mdebug[0m] [EE] Run!
+[Debugger] Failed to PR_SET_PTRACER Invalid argument
+dkernel: fakeiso mode
+dkernel: debug mode
+dkernel: no sound mode
+[51:59:729] [[38;2;144;238;144minfo[0m] gkernel: global heap 0x0013fd20 to 0x03eb82e0 (size 61.470 MB)
+dkernel: boot:0 debug:1 mem:1 syms:0 dev:0 mod:0
+Initializing CD library in FAKEISO mode
+arg 1 : fakeiso
+arg 2 : SCREEN1.USA
+arg 3 : -nosound
+[51:59:742] [[38;2;064;224;208mdebug[0m] [IOP] Run!
+[51:59:742] [[38;2;144;238;144minfo[0m] ======== overlrd2.irx startup ========
+[51:59:750] [[38;2;255;000;000merror[0m] Cubeb init failed
+[51:59:750] [[38;2;144;238;144minfo[0m] top of ISO Thread
+[51:59:750] [[38;2;255;255;000mwarn[0m] Failed to open music tweak file.
+[51:59:750] [[38;2;144;238;144minfo[0m] sending mbox for init driver
+[51:59:750] [[38;2;255;255;000mwarn[0m] Failed to find vagdir file
+[51:59:750] [[38;2;144;238;144minfo[0m] [overlord2] Threads started
+InitIOP OK
+[51:59:750] [[38;2;144;238;144minfo[0m] InitVideo: skipping splash!
+
+[51:59:751] [[38;2;144;238;144minfo[0m] [DECI2] Add new protocol driver 1 for 0xe042
+gproto: proto open at socket 1
+InitSound
+InitRPC
+kernel: RPC port #0 started [FAB0]
+kernel: RPC port #1 started [FAB1]
+kernel: RPC port #2 started [FAB2]
+kernel: RPC port #3 started [FAB3]
+kernel: RPC port #4 started [FAB4]
+kernel: RPC port #5 started [FAB5]
+[51:59:751] [[38;2;064;224;208mdebug[0m] [Load and Link DGO From C] kernel
+[51:59:751] [[38;2;064;224;208mdebug[0m] [Begin Loading DGO RPC] KERNEL.CGO, 0x36b82c0, 0x3ab82c0, 0x162d80
+[51:59:751] [[38;2;144;238;144minfo[0m] DGO RPC: new command ID, starting a load for KERNEL.CGO
+[51:59:751] [[38;2;144;238;144minfo[0m] DGO RPC: CancelDGO NO CMD
+[51:59:751] [[38;2;064;224;208mdebug[0m] [XSocketServer:8114] initialized
+[51:59:751] [[38;2;144;238;144minfo[0m] [Deci2Server:8114] awaiting connections
+[51:59:751] [[38;2;064;224;208mdebug[0m] [DECI2] Waiting for listener...
+[51:59:752] [[38;2;144;238;144minfo[0m] Opening KERNEL  CGO for DGO Load
+[51:59:752] [[38;2;064;224;208mdebug[0m] CDvdDriver swapping files NONE - > KERNEL  CGO
+[51:59:752] [[38;2;064;224;208mdebug[0m] [link and exec] gcommon            0  25424 heap-use   143408  3145728: 0x162d50
+[51:59:753] [[38;2;064;224;208mdebug[0m] [link and exec] gstring-h          0     96 heap-use   160432  3147706: 0x166fd0
+[51:59:754] [[38;2;064;224;208mdebug[0m] [link and exec] gkernel-h          0  20720 heap-use   160432  3147706: 0x166fd0
+[51:59:755] [[38;2;064;224;208mdebug[0m] [link and exec] gkernel            0  40576 heap-use   163072  3159887: 0x167a20
+Jak 3 kernel loaded!
+[51:59:757] [[38;2;064;224;208mdebug[0m] [link and exec] pskernel           0     96 heap-use  5840644  4220512: 0x6d1c24
+[51:59:757] [[38;2;064;224;208mdebug[0m] [link and exec] gstring            0  14832 heap-use  5840644  4220512: 0x6d1c24
+[51:59:757] [[38;2;064;224;208mdebug[0m] [link and exec] dgo-h              0   1680 heap-use  5893593  4220512: 0x6deaf9
+[51:59:758] [[38;2;064;224;208mdebug[0m] [link and exec] gstate             1   3488 heap-use  5893888  4221307: 0x6dec20
+[51:59:758] [[38;2;144;238;144minfo[0m] load_and_link_dgo_from_c took 0.007 s
+
+[51:59:758] [[38;2;144;238;144minfo[0m] Got correct kernel version 2.0
+InitListenerConnect
+InitCheckListener
+kernel: machine started
+[Listener] Failed to connect
+[Listener] Socket connected established! (took 0 tries). Waiting for version...
+[51:59:801] [[38;2;064;224;208mdebug[0m] [DECI2] Connected!
+[DECI2] Got message: 174 0 0xe042 H -> E
+Got version 1.0 OK!
+[Debugger] Context: valid = true, s7 = 0x147d21, base = 0x2123000000, tid = 9087
+
+1342757
+
+[ RUN      ] Jak3KernelTest.SkateInputRecognizesEightBasicAndCompoundGestures
+[DECI2] Got message: 8058 0 0xe042 H -> E
+[DECI2] Got message: 9908 0 0xe042 H -> E
+[DECI2] Got message: 17967 0 0xe042 H -> E
+[DECI2] Got message: 3066 0 0xe042 H -> E
+[DECI2] Got message: 11152 0 0xe042 H -> E
+[DECI2] Got message: 12735 0 0xe042 H -> E
+[DECI2] Got message: 11090 0 0xe042 H -> E
+[DECI2] Got message: 3709 0 0xe042 H -> E
+[DECI2] Got message: 211 0 0xe042 H -> E
+88110596
+
+88118100
+
+142455341048
+
+142455341048
+
+88137748
+
+88145812
+
+88153156
+
+88155860
+
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateInputRecognizesEightBasicAndCompoundGestures (80 ms)
+[ RUN      ] Jak3KernelTest.SkateInputRecognizesNollieVariants
+[DECI2] Got message: 220 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateInputRecognizesNollieVariants (1 ms)
+[ RUN      ] Jak3KernelTest.SkateInputRejectsNoiseAndShortPreload
+[DECI2] Got message: 236 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateInputRejectsNoiseAndShortPreload (1 ms)
+[ RUN      ] Jak3KernelTest.SkateInputBuffersOnceAndRequiresNeutral
+[DECI2] Got message: 220 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateInputBuffersOnceAndRequiresNeutral (1 ms)
+[ RUN      ] Jak3KernelTest.SkateInputCancelsSlowFlicksAndPausedFrames
+[DECI2] Got message: 219 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateInputCancelsSlowFlicksAndPausedFrames (1 ms)
+[ RUN      ] Jak3KernelTest.SkateInputSupportsConfigurableSensitivityAndDeadZone
+[DECI2] Got message: 218 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateInputSupportsConfigurableSensitivityAndDeadZone (1 ms)
+[ RUN      ] Jak3KernelTest.SkateInputRecognizesSameTraceAtCommonFrameRates
+[DECI2] Got message: 223 0 0xe042 H -> E
+[DECI2] Got message: 223 0 0xe042 H -> E
+[DECI2] Got message: 223 0 0xe042 H -> E
+#t
+0
+
+#t
+0
+
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateInputRecognizesSameTraceAtCommonFrameRates (7 ms)
+[ RUN      ] Jak3KernelTest.SkateInputRetainsBufferedPopEnergySnapshots
+[DECI2] Got message: 220 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateInputRetainsBufferedPopEnergySnapshots (1 ms)
+[ RUN      ] Jak3KernelTest.SkatePhysicsPreservesMomentumAndBoundsIntegration
+[DECI2] Got message: 215 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkatePhysicsPreservesMomentumAndBoundsIntegration (1 ms)
+[ RUN      ] Jak3KernelTest.SkatePhysicsGroundSpeedAgreesAtCommonFrameRates
+[DECI2] Got message: 218 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkatePhysicsGroundSpeedAgreesAtCommonFrameRates (1 ms)
+[ RUN      ] Jak3KernelTest.SkatePhysicsCarvesProportionallyAndVariesPop
+[DECI2] Got message: 220 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkatePhysicsCarvesProportionallyAndVariesPop (1 ms)
+[ RUN      ] Jak3KernelTest.SkatePhysicsGravityAndLandingQuality
+[DECI2] Got message: 226 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkatePhysicsGravityAndLandingQuality (1 ms)
+[ RUN      ] Jak3KernelTest.SkatePhysicsPumpsOnlyCompressedTransitions
+[DECI2] Got message: 214 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkatePhysicsPumpsOnlyCompressedTransitions (1 ms)
+[ RUN      ] Jak3KernelTest.SkateTricksValidateLaunchAndScoreOneLanding
+[DECI2] Got message: 220 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateTricksValidateLaunchAndScoreOneLanding (1 ms)
+[ RUN      ] Jak3KernelTest.SkateTricksRequireFlipCompletionAndProvideTransforms
+[DECI2] Got message: 229 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateTricksRequireFlipCompletionAndProvideTransforms (2 ms)
+[ RUN      ] Jak3KernelTest.SkateTricksClassifySketchyAndFailedLandings
+[DECI2] Got message: 220 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateTricksClassifySketchyAndFailedLandings (1 ms)
+[ RUN      ] Jak3KernelTest.SkateTricksLinkSupportsBankCombosAndLoseUnbankedScoreOnBail
+[DECI2] Got message: 230 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateTricksLinkSupportsBankCombosAndLoseUnbankedScoreOnBail (1 ms)
+[ RUN      ] Jak3KernelTest.SkateTricksRejectBriefManualsAndAirborneSupport
+[DECI2] Got message: 234 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateTricksRejectBriefManualsAndAirborneSupport (1 ms)
+[ RUN      ] Jak3KernelTest.SkateTricksSupportOneLateTrickGrabsAndSpins
+[DECI2] Got message: 218 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateTricksSupportOneLateTrickGrabsAndSpins (1 ms)
+[ RUN      ] Jak3KernelTest.SkateTricksAccumulateRotationAtCommonFrameRates
+[DECI2] Got message: 223 0 0xe042 H -> E
+[DECI2] Got message: 223 0 0xe042 H -> E
+[DECI2] Got message: 223 0 0xe042 H -> E
+#t
+0
+
+#t
+0
+
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateTricksAccumulateRotationAtCommonFrameRates (3 ms)
+[ RUN      ] Jak3KernelTest.SkateTricksDoNotAwardPhantomOllieOnLedgeFall
+[DECI2] Got message: 220 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateTricksDoNotAwardPhantomOllieOnLedgeFall (1 ms)
+[ RUN      ] Jak3KernelTest.SkateTricksPitchOlliesAndNolliesAndCapComboMultiplier
+[DECI2] Got message: 229 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateTricksPitchOlliesAndNolliesAndCapComboMultiplier (1 ms)
+[ RUN      ] Jak3KernelTest.SkateRuntimeDefaultsOffAndExcludesScriptedControls
+[DECI2] Got message: 225 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateRuntimeDefaultsOffAndExcludesScriptedControls (1 ms)
+[ RUN      ] Jak3KernelTest.SkateRuntimeResetsProfileOwnerAndBufferedInput
+[DECI2] Got message: 222 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateRuntimeResetsProfileOwnerAndBufferedInput (2 ms)
+[ RUN      ] Jak3KernelTest.SkateRuntimeShapesControllerBytesAndDeadZone
+[DECI2] Got message: 222 0 0xe042 H -> E
+#t
+0
+
+[       OK ] Jak3KernelTest.SkateRuntimeShapesControllerBytesAndDeadZone (2 ms)
+[DECI2] Got message: 32 0 0xe042 H -> E
+kernel: machine shutdown (reason 2)
+IOP shut down
+DMA shut down
+dconnect: closed socket at kernel side
+[52:00:009] [[38;2;064;224;208mdebug[0m] [EE] Done!
+[52:00:010] [[38;2;064;224;208mdebug[0m] # Stop DMP
+[52:00:010] [[38;2;064;224;208mdebug[0m] # Stop IOP
+[52:00:010] [[38;2;064;224;208mdebug[0m] # Stop EE
+[52:00:010] [[38;2;064;224;208mdebug[0m] # Stop EE-Worker
+[52:00:010] [[38;2;064;224;208mdebug[0m] [SYSTEM] Thread EE is returning
+[52:00:011] [[38;2;064;224;208mdebug[0m] [SYSTEM] Thread IOP is returning
+[52:00:027] [[38;2;064;224;208mdebug[0m] [SYSTEM] Thread EE-Worker is returning
+[Listener] Closed connection to target
+[52:00:111] [[38;2;064;224;208mdebug[0m] [SYSTEM] Thread DMP is returning
+[52:00:111] [[38;2;064;224;208mdebug[0m] # Stop DMP
+[52:00:111] [[38;2;064;224;208mdebug[0m] # Stop IOP
+[52:00:111] [[38;2;064;224;208mdebug[0m] # Stop EE
+[52:00:111] [[38;2;064;224;208mdebug[0m] # Stop EE-Worker
+[52:00:111] [[38;2;064;224;208mdebug[0m]  # Join DMP
+[52:00:111] [[38;2;064;224;208mdebug[0m]  # Join IOP
+[52:00:111] [[38;2;064;224;208mdebug[0m]  # Join EE
+[52:00:111] [[38;2;064;224;208mdebug[0m]  # Join EE-Worker
+[52:00:111] [[38;2;144;238;144minfo[0m] GOAL Runtime Shutdown (code 2)
+[----------] 25 tests from Jak3KernelTest (122 ms total)
+
+[----------] Global test environment tear-down
+[==========] 25 tests from 1 test suite ran. (796 ms total)
+[  PASSED  ] 25 tests.

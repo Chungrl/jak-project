@@ -74,7 +74,7 @@ before that success. The current reader failure remains unresolved.
 | Standalone production modules and four fixtures | Compiled; listener-not-connected warnings mean these compile-only checks did not launch gameplay |
 | `Jak3KernelTest.Skate*` | **25 passed, zero failures/errors**, 0.796 seconds; XML timestamp `2026-10-11T14:51:59.358` |
 | Latest integrated board/state GOAL compilation | **Failed**, missing close parenthesis described above |
-| Recovery source hash check / Git whitespace check | Passed; preservation checks only |
+| Recovery source hash check / source-document whitespace check | Passed; preservation checks only |
 
 The 25 tests execute pure production model functions in a headless Jak 3 GOAL
 kernel. They cover simulated gestures and buffering, tuning, 30/60/120 Hz traces,
