@@ -104,6 +104,21 @@
 (define *skate3-bridge-world-center* (new 'global 'vector))
 ;; Cells of the last gather that filled the collide cache and so lost triangles.
 (define *skate3-bridge-world-overflows* 0)
+;; The engine only knows the level's solid background. If Jak drops this far
+;; below where the board last touched down (off the level, or into water, which
+;; the jetboard can cross and a skateboard cannot), he is handed back to it.
+(defconstant SKATE3_FALL_LIMIT (meters 30))
+(define *skate3-bridge-ground-y* 0.0)
+;; After a bail the engine puts the skater back at a spot it remembers from
+;; earlier in the ride, and with nothing remembered yet, at its own origin. A
+;; jump this far from the centre of the gathered world in one step is such a
+;; respawn somewhere the engine has no ground: he is restarted at the last safe
+;; spot instead.
+(defconstant SKATE3_TELEPORT_DIST (meters 14))
+;; Where the board last rolled with its wheels down. A bailed skater can come to
+;; rest inside or under the level's collision, so Jak is put back here if he is
+;; handed back to the game mid-bail.
+(define *skate3-bridge-safe-pos* (new 'global 'vector))
 
 (defun skate3-bridge-stick ((raw int) (invert symbol))
   "Byte stick axis around 128 to -1..1. The pad's vertical axes grow downward."
@@ -263,6 +278,10 @@
 (defbehavior target-skate3-bridge-release target ()
   "Give Jak back to the game: stop following the engine and stop posing him."
   (when *jak3-skate3-bridge-active*
+    ;; Engine states: 100s riding, 200s in the air, 300 bailed, 500s off the board.
+    (when (>= (-> *skate3-bridge-io* state) 300)
+      (move-to-point! (-> self control) *skate3-bridge-safe-pos*)
+      (vector-reset! (-> self control transv)))
     (set! (-> *skate3-bridge-io* command) 8)
     (pc-skate3-bridge *skate3-bridge-io*)
     ;; On the jetboard Daxter rides the board joint.
@@ -286,8 +305,18 @@
     (skate3-bridge-clear-input! io)
     (set! *skate3-rig-count* 0)
     (set! *jak3-skate3-bridge-active* (= (pc-skate3-bridge io) 0))
-    (if *jak3-skate3-bridge-active*
-        (target-skate3-bridge-rig-setup))
+    (set! *skate3-bridge-ground-y* (-> self control trans y))
+    (vector-copy! *skate3-bridge-safe-pos* (-> self control trans))
+    (when *jak3-skate3-bridge-active*
+      (target-skate3-bridge-rig-setup)
+      ;; The jetboard's hover, wind and engine loops are kept alive by its own
+      ;; update, which no longer runs; it starts them again when it resumes.
+      (sound-stop (-> self board wind-sound-id))
+      (sound-stop (-> self board engine-sound-id))
+      (sound-stop (-> self board bank-sound-id))
+      (sound-stop (-> self board ride-sound-id))
+      (sound-stop (-> self board eco-sound-id))
+      (sound-stop (-> self board charge-sound-id)))
     ;; A failed start turns the bridge off so it is not retried every frame.
     (if (not *jak3-skate3-bridge-active*)
         (set! *jak3-skate3-bridge-enabled* #f)))
@@ -301,7 +330,20 @@
     (if (not *jak3-skate3-bridge-scripted-input*)
         (skate3-bridge-read-pad! io (-> self control cpad)))
     (cond
-      ((= (pc-skate3-bridge io) 0)
+      ((and (= (pc-skate3-bridge io) 0)
+            (begin
+              (if (> (-> io wheels) 0)
+                  (set! *skate3-bridge-ground-y* (-> io position y)))
+              (when (and (< (-> io state) 200) (>= (-> io wheels) 3))
+                (vector-copy! *skate3-bridge-safe-pos* (-> io position))
+                ;; Jak stands a little above where the board's wheels touch.
+                (+! (-> *skate3-bridge-safe-pos* y) (meters 0.3)))
+              (> (-> io position y) (- *skate3-bridge-ground-y* SKATE3_FALL_LIMIT))))
+       (let ((dx (- (-> io position x) (-> *skate3-bridge-world-center* x)))
+             (dz (- (-> io position z) (-> *skate3-bridge-world-center* z))))
+         (when (> (+ (* dx dx) (* dz dz)) (* SKATE3_TELEPORT_DIST SKATE3_TELEPORT_DIST))
+           (move-to-point! (-> self control) *skate3-bridge-safe-pos*)
+           (target-skate3-bridge-activate)))
        (move-to-point! (-> self control) (-> io position))
        (vector-copy! (-> self control transv) (-> io velocity))
        (forward-up-nopitch->quaternion (-> self control quat) (-> io forward) *up-vector*)

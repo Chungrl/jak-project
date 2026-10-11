@@ -1,0 +1,83 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Manual check: makes the skater bail (a kickflip from a
+;; standstill beside a rock), then watches how he recovers with no input, and
+;; gets Jak off the board while bailed. Not part of any DGO.
+
+(define *sk3b-phase* 0)
+(define *sk3b-timer* 0)
+
+(defun sk3b-log ((label string))
+  (format 0 "SK3TEST ~S target ~A active ~A engine state ~D wheels ~D bails ~D"
+          label (-> *target* state name) *jak3-skate3-bridge-active*
+          (-> *skate3-bridge-io* state) (-> *skate3-bridge-io* wheels) (-> *skate3-bridge-io* bails))
+  (format 0 " pos ~m ~m ~m~%"
+          (-> *target* control trans x) (-> *target* control trans y) (-> *target* control trans z))
+  (none))
+
+(defun sk3b-next ((frames int))
+  (+! *sk3b-phase* 1)
+  (set! *sk3b-timer* frames)
+  (none))
+
+(defun sk3b-tick ()
+  (let ((io *skate3-bridge-io*)
+        (phase *sk3b-phase*))
+    (cond
+      ((and (> *sk3b-timer* 0) (!= phase 2))
+       (+! *sk3b-timer* -1)
+       (if (and (>= phase 6) (<= phase 7) (= (mod *sk3b-timer* 60) 0))
+           (sk3b-log "waiting")))
+      ((= phase 0)
+       (when (and *target* (!= (-> *target* next-state name) 'target-continue))
+         (logior! (-> *game-info* features) (game-feature board))
+         (logior! (-> *game-info* debug-features) (game-feature board))
+         (send-event *target* 'change-mode 'board #f)
+         (sk3b-next 240)))
+      ((= phase 1)
+       (set! *jak3-skate3-bridge-scripted-input* #t)
+       (skate3-bridge-clear-input! io)
+       (set! *jak3-skate3-bridge-enabled* #t)
+       (sk3b-next 0))
+      ((= phase 2)
+       (+! *sk3b-timer* 1)
+       (if (or *jak3-skate3-bridge-active* (> *sk3b-timer* 900))
+           (sk3b-next 270)))
+      ((= phase 3)
+       (sk3b-log "before")
+       (set! (-> io right-y) -1.0)
+       (sk3b-next 10))
+      ((= phase 4)
+       (set! (-> io right-x) 0.7)
+       (set! (-> io right-y) 0.7)
+       (sk3b-next 5))
+      ((= phase 5)
+       (skate3-bridge-clear-input! io)
+       (sk3b-next 90))
+      ((= phase 6)
+       (sk3b-log "after-flip")
+       ;; no input: does the skater get up by himself?
+       (sk3b-next 600))
+      ((= phase 7)
+       (sk3b-log "after-10s")
+       ;; off the board, wherever he is
+       (send-event *target* 'end-mode 'board)
+       (sk3b-next 180))
+      ((= phase 8)
+       (sk3b-log "off-board")
+       (set! *jak3-skate3-bridge-enabled* #f)
+       (set! *jak3-skate3-bridge-scripted-input* #f)
+       (format 0 "SK3TEST done~%")
+       (sk3b-next 0))))
+  (none))
+
+(set! *sk3b-phase* 0)
+(set! *sk3b-timer* 0)
+(format 0 "SK3TEST begin~%")
+(process-spawn-function process :name "sk3-bail"
+  (lambda :behavior process ()
+    (loop
+      (sk3b-tick)
+      (suspend)))
+  :to *display-pool*)
