@@ -63,10 +63,12 @@ Checked on Jak 3 NTSC in Spargus, with scripted input and screenshots:
 
 - **Not tried with a real controller.** Everything above was driven by scripted
   input. The pad mapping is written but untested.
-- **Only the level's solid background is known to the engine.** Water, moving
+- **Only the level's solid background is known to the engine.** Moving
   platforms, doors, vehicles and characters are not obstacles to the
-  skateboard, and it cannot ride on them. If Jak drops 30 m below where the
-  board last touched down the bridge switches off and the jetboard takes over.
+  skateboard, and it cannot ride on them. In deep water the bridge hands over
+  to the jetboard and comes back a second after Jak is out; that hand-over is
+  written but has not been exercised. If Jak drops 30 m below where the board
+  last touched down the bridge switches off and the jetboard takes over.
 - **Jak can still touch things.** Triggers, pickups and characters react to him
   as usual; skating into citizens can make Spargus's guards open fire.
 - **Grinds are untested.** The engine finds grindable edges in the level

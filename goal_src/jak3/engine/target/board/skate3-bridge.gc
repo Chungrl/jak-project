@@ -84,6 +84,10 @@
 ;; Whether gk was started with the bridge's environment variables: 'unknown
 ;; until first asked, then #t or #f.
 (define *jak3-skate3-bridge-configured* 'unknown)
+;; Set while the bridge has stepped aside because Jak is in deep water, which the
+;; jetboard can cross and a skateboard cannot. It comes back once he is out.
+(define *jak3-skate3-bridge-in-water* #f)
+(define *skate3-bridge-dry-time* (the-as time-frame 0))
 ;; When #t the pad is not read, so a test can drive the input fields directly.
 (define *jak3-skate3-bridge-scripted-input* #f)
 (define *skate3-bridge-io* (new 'global 'skate3-bridge-io))
@@ -398,7 +402,15 @@
                (cpad-pressed? pad l3)
                (cpad-hold? pad r3))
       (set! *jak3-skate3-bridge-enabled* (not *jak3-skate3-bridge-enabled*))
+      (set! *jak3-skate3-bridge-in-water* #f)
       (cpad-clear! pad l3)))
+  ;; Out of the water for a second: back to the skateboard.
+  (when *jak3-skate3-bridge-in-water*
+    (if (logtest? (water-flag touch-water) (-> self water flags))
+        (set! *skate3-bridge-dry-time* (current-time)))
+    (when (time-elapsed? *skate3-bridge-dry-time* (seconds 1))
+      (set! *jak3-skate3-bridge-in-water* #f)
+      (set! *jak3-skate3-bridge-enabled* #t)))
   (cond
     ((not *jak3-skate3-bridge-enabled*)
      (if *jak3-skate3-bridge-active*
@@ -413,6 +425,13 @@
      ;; on them by the postbind), touching, shadow and powerups.
      (target-no-move-post)
      (target-board-joint-points)
+     ;; The engine only knows the solid bottom. In deep water, hand over to the
+     ;; jetboard until Jak is out again.
+     (when (and (logtest? (water-flag touch-water) (-> self water flags))
+                (logtest? (water-flag swimming under-water) (-> self water flags)))
+       (set! *jak3-skate3-bridge-in-water* #t)
+       (set! *skate3-bridge-dry-time* (current-time))
+       (set! *jak3-skate3-bridge-enabled* #f))
      (if *jak3-skate3-bridge-hud*
          (skate3-bridge-draw-hud))
      ;; Triangle gets off the board, as in Skate 3 (R2 is a grab here).
