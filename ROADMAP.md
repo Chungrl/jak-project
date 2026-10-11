@@ -100,3 +100,11 @@ save files. Local users supply their own lawful game data. Commit source,
 documentation, tests and original/licensed test material only. Keep changes on
 the feature branch and direct any pull request to the user's fork, with clear
 AI disclosure and a distinction between automated verification and local testing.
+# Recovery handoff takes precedence (AI-assisted)
+
+Skating work is preserved on `jak3-skate-controls`, stacked on `jak3-nextgen-lab`.
+Read [RECOVERY_STATUS.md](RECOVERY_STATUS.md), including the complete feature-area
+checklist and known compile/ownership issues, before planning further work.
+This recovery task authorizes no new feature implementation. The roadmap below
+is historical context from the earlier lab, not skating completion evidence.
+

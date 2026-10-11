@@ -1,0 +1,181 @@
+from pathlib import Path
+p=Path('goal_src/jak3/engine/target/board/target-board.gc')
+s=p.read_text()
+anchor='(defbehavior target-board-smack-surface? target ()'
+helpers=r'''(#when PC_PORT
+
+(defbehavior target-skate-eligible? target ()
+  (skate-runtime-eligible?
+    *jak3-skate-enabled* *target-rc-board-controls*
+    (or (-> self board stick-off)
+        (-> *setting-control* user-current player-control-override)
+        (!= self *target*) (paused?))
+    (and (not (focus-test? self dead hit))
+         (case (-> self state name)
+           (('target-board-stance 'target-board-jump 'target-board-falling
+             'target-board-hit-ground 'target-board-ride-edge) #t)
+           (else #f))
+         (or (not (-> self next-state))
+             (case (-> self next-state name)
+               (('target-board-stance 'target-board-jump 'target-board-falling
+                 'target-board-hit-ground 'target-board-ride-edge) #t)
+               (else #f))))))
+
+(defbehavior target-skate-ground? target ()
+  (and (target-skate-eligible?) (board-on-ground?)
+       (= (-> self control ground-pat mode) (pat-mode ground))
+       (= (-> self control mod-surface) *board-walk-mods*)))
+
+(defbehavior target-skate-momentum target ()
+  (let* ((velocity (-> self control transv-ctrl))
+         (push (- (skate-stick-axis (the int (-> self control cpad lefty)))))
+         (friction 1.0)
+         (direction (if (< (-> velocity z) 0.0) -1.0 1.0)))
+    ;; Surface friction has already been removed from this per-target working
+    ;; copy; use the skate coefficient once. Gravity supplies slope acceleration.
+    (set! (-> velocity z)
+      (* direction 4096.0
+         (skate-speed-step (/ (fabs (-> velocity z)) 4096.0)
+                           (fmax push 0.0) (fmax (- push) 0.0)
+                           friction 0.0 (seconds-per-frame))))
+    (set! (-> velocity x)
+      (* 4096.0 (skate-lateral-step (/ (-> velocity x) 4096.0)
+                                  friction (seconds-per-frame))))
+    (set! (-> self board transv-max) (* 4096.0 (-> *skate-physics-config* speed-limit))))
+  (none))
+
+(defbehavior target-skate-sample target ()
+  (cond
+    ((target-skate-eligible?)
+     (set! (-> *jak3-skate-state* active?) #t)
+     (skate-input-sample! *skate-input-state* *skate-input-config*
+       (/ (- (the float (-> self control cpad rightx)) 128.0) 127.0)
+       (/ (- 128.0 (the float (-> self control cpad righty))) 127.0)
+       (seconds-per-frame))
+     (cond
+       ((and (target-skate-ground?) (can-jump? 'board)
+             (-> *skate-input-state* event))
+        (let ((trick (skate-input-consume! *skate-input-state*)))
+          (when (skate-trick-launch! *skate-tricks* trick (-> *skate-input-state* event-strength))
+            (set! (-> *jak3-skate-state* pop-speed)
+              (skate-pop-speed (-> *skate-input-state* event-preload-time)
+                               (-> *skate-input-state* event-flick-speed)))
+            (set! (-> *jak3-skate-state* ground?) #f)
+            (flush-trick-list (-> self board))
+            ;; Retain native jump animation, event and mission notification path.
+            ;; Equal min/max prevents vanilla X-hold duration from changing pop.
+            (go target-board-jump (meters 1) (meters 1) #f))))
+       ((and (not (board-on-ground?)) (= (-> *skate-tricks* phase) 'ground))
+        (skate-trick-fall! *skate-tricks*)))
+     (when (not (board-on-ground?))
+       (skate-trick-air-step! *skate-tricks* (seconds-per-frame) 0.0 #f)))
+    ((-> *jak3-skate-state* active?) (skate-runtime-reset!)))
+  (none))
+
+(defbehavior target-skate-contact target ()
+  (when (target-skate-eligible?)
+    (let ((contact? (or (board-on-ground?) (focus-test? self rail))))
+      (when (and contact? (not (-> *jak3-skate-state* ground?))
+                 (= (-> *skate-tricks* phase) 'airborne))
+        (let* ((velocity-angle (vector-y-angle (-> self control transv)))
+               (angle (/ (fabs (deg-diff (y-angle (-> self control)) velocity-angle)) 182.04445))
+               ;; Fakie/switch may be parallel in either direction; sideways fails.
+               (alignment (fmin angle (fabs (- 180.0 angle)))))
+          (skate-trick-land! *skate-tricks*
+            (-> *jak3-skate-state* incoming-impact) alignment)))
+      (when contact? (skate-trick-support! *skate-tricks* 'ground (seconds-per-frame)))
+      (set! (-> *jak3-skate-state* ground?) contact?)))
+  (none))
+
+)
+
+'''
+assert anchor in s
+s=s.replace(anchor,helpers+anchor,1)
+s=s.replace('(defbehavior board-add-thrust target ()','(defbehavior board-add-thrust-original target ()',1)
+anchor='(defbehavior target-board-exit-check target ()'
+wrapper=r'''(defbehavior board-add-thrust target ()
+  (#when PC_PORT
+    (when (target-skate-ground?)
+      (target-skate-momentum)
+      (return (none)))
+    ;; No powered thrust in a skate jump: maintain collision-resolved momentum.
+    (when (and (target-skate-eligible?) (not (board-on-ground?)))
+      (return (none))))
+  (board-add-thrust-original)
+  (none))
+
+'''
+s=s.replace(anchor,wrapper+anchor,1)
+# Snapshot pre-contact velocity; post-contact zeroed velocity is unsuitable.
+s=s.replace('        (target-board-collision)\n',r'''        (#when PC_PORT
+          (when (target-skate-eligible?)
+            (set! (-> *jak3-skate-state* incoming-impact)
+              (/ (fmax 0.0 (- (vector-dot (-> self control transv)
+                                         (-> self control dynam gravity-normal)))) 4096.0))))
+        (target-board-collision)
+        (#when PC_PORT (target-skate-contact))
+''',1)
+s=s.replace('(defbehavior target-board-real-post target ()\n','(defbehavior target-board-real-post target ()\n  (#when PC_PORT (target-skate-sample))\n',1)
+s=s.replace('        (target-board-pre-move)\n',r'''        (target-board-pre-move)
+        (#when PC_PORT
+          (when (and (target-skate-eligible?)
+                     (or (target-skate-ground?) (= (-> *skate-tricks* phase) 'airborne)))
+            (set! (-> self control dynam gravity-length) (* 4096.0 (skate-gravity)))
+            (vector-float*! (-> self control dynam gravity)
+                           (-> self control dynam gravity-normal)
+                           (-> self control dynam gravity-length)))
+          (when (target-skate-ground?)
+            ;; current-surface is the per-target working surface, never the
+            ;; shared vanilla walk surface. Prevent a second friction pass.
+            (set! (-> self control current-surface fric) 0.0)))
+''',1)
+s=s.replace('          (turn-to-vector s5-0 (-> self control pad-magnitude))',r'''          (#when PC_PORT
+            (when (target-skate-ground?)
+              (quaternion-rotate-y! (-> self control dir-targ) (-> self control dir-targ)
+                (* (skate-carve-rate
+                     (skate-stick-axis (the int (-> self control cpad leftx)))
+                     (/ (-> self control ctrl-xz-vel) 4096.0)) (seconds-per-frame)))))
+          (if (#if PC_PORT (target-skate-ground?) #f)
+              (none)
+              (turn-to-vector s5-0 (-> self control pad-magnitude)))''',1)
+# Clear input/camera ownership when leaving the board's state family.
+s=s.replace('    (set! (-> self board latch?) #f)\n    (mode-set!', '    (#when PC_PORT (skate-runtime-reset!))\n    (set! (-> self board latch?) #f)\n    (mode-set!',1)
+p.write_text(s)
+# Asset-free modules register automatically via GAME's object sequence.
+p=Path('goal_src/jak3/dgos/game.gd');s=p.read_text();s=s.replace('  "target-board.o"', '  "skate-input.o"\n  "skate-physics.o"\n  "skate-tricks.o"\n  "skate-runtime.o"\n  "target-board.o"',1);p.write_text(s)
+# Only ordinary interactive skate states suppress the normal camera stick.
+p=Path('goal_src/jak3/engine/camera/cam-states.gc');s=p.read_text();s=s.replace(';; DECOMP BEGINS','(#when PC_PORT\n  (define-extern skate-runtime-camera-owned? (function symbol)))\n\n;; DECOMP BEGINS',1)
+needle='(if (or (logtest? (cam-slave-options-u32 BLOCK_RIGHT_STICK) (-> self options))'
+assert s.count(needle)==2
+s=s.replace(needle,'(if (or (#if PC_PORT (skate-runtime-camera-owned?) #f)\n            (logtest? (cam-slave-options-u32 BLOCK_RIGHT_STICK) (-> self options))')
+p.write_text(s)
+# Reuse native jump code/animations; override just the opt-in impulse.
+p=Path('goal_src/jak3/engine/target/board/board-states.gc');s=p.read_text()
+s=s.replace('(defbehavior target-board-spin-check target ()\n','(defbehavior target-board-spin-check target ()\n  (#when PC_PORT (when (target-skate-eligible?) (return (none))))\n',1)
+# Three ordinary vanilla jump/duck transitions are opt-out while profile owns input.
+start=s.index('(defstate target-board-stance (target)');end=s.index('(defstate target-board-duck-stance (target)',start)
+chunk=s[start:end]
+chunk=chunk.replace('(if (and (cpad-hold? (-> self control cpad number) l1)', '(if (and (not (#if PC_PORT (target-skate-eligible?) #f))\n             (cpad-hold? (-> self control cpad number) l1)',1)
+chunk=chunk.replace('(when (and (recently-pressed? x)', '(when (and (not (#if PC_PORT (target-skate-eligible?) #f))\n               (recently-pressed? x)',1)
+s=s[:start]+chunk+s[end:]
+start=s.index('(defstate target-board-jump (target)');end=s.index('(defstate ',start+15)
+chunk=s[start:end]
+needle='    (vector-copy! (-> self board slow-transv) (-> self control transv))'
+patch=r'''    (#when PC_PORT
+      (when (and (target-skate-eligible?) (> (-> *jak3-skate-state* pop-speed) 0.0))
+        (set! (-> self control dynam gravity-length) (* 4096.0 (skate-gravity)))
+        (vector+float*! (-> self control transv) (-> self control transv)
+          (-> self control dynam gravity-normal)
+          (- (* 4096.0 (-> *jak3-skate-state* pop-speed))
+             (vector-dot (-> self control transv) (-> self control dynam gravity-normal))))
+        (set! (-> *jak3-skate-state* pop-speed) 0.0)))
+'''
+chunk=chunk.replace(needle,patch+needle,1)
+s=s[:start]+chunk+s[end:]
+# No vanilla X kick in custom air. Native collision/land transition remains.
+start=s.index('(defbehavior target-board-jump-trans target ()');end=s.index('(defstate ',start)
+chunk=s[start:end].replace('(if (and (cpad-pressed? (-> self control cpad number) x)', '(if (and (not (#if PC_PORT (target-skate-eligible?) #f))\n           (cpad-pressed? (-> self control cpad number) x)',1)
+s=s[:start]+chunk+s[end:]
+p.write_text(s)
+print('Wired Milestone A adapter, guarded native controls, jump impulse and camera ownership.')

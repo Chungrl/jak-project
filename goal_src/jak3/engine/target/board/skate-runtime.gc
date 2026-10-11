@@ -1,0 +1,53 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Profile/lifecycle boundary, independent of target ABI and assets.
+(#when PC_PORT
+
+(deftype skate-runtime-state (basic)
+  ((active? symbol)
+   (ground? symbol)
+   (incoming-impact float)
+   (pop-speed float)
+   (surface-friction float)
+   (bail-time float)))
+
+(define *jak3-skate-enabled* #f)
+(define *jak3-skate-hud* #t)
+(define *jak3-skate-state* (new 'static 'skate-runtime-state))
+
+(defun skate-runtime-eligible? ((enabled? symbol) (rc? symbol)
+                              (locked? symbol) (safe-state? symbol))
+  (and enabled? (not rc?) (not locked?) safe-state?))
+
+(defun skate-runtime-camera-owned? ()
+  (and *jak3-skate-enabled* (-> *jak3-skate-state* active?)))
+
+(defun skate-runtime-reset! ()
+  (set! (-> *jak3-skate-state* active?) #f)
+  (set! (-> *jak3-skate-state* ground?) #f)
+  (set! (-> *jak3-skate-state* incoming-impact) 0.0)
+  (set! (-> *jak3-skate-state* pop-speed) 0.0)
+  (set! (-> *jak3-skate-state* surface-friction) 1.0)
+  (set! (-> *jak3-skate-state* bail-time) 0.0)
+  (skate-input-reset! *skate-input-state*)
+  (skate-trick-reset! *skate-tricks*)
+  (none))
+
+(defun skate-set-profile! ((profile symbol))
+  "Session profile: original (default) or skate. Reject misspelled profiles."
+  (when (or (= profile 'original) (= profile 'skate))
+    (skate-runtime-reset!)
+    (set! *jak3-skate-enabled* (= profile 'skate)))
+  *jak3-skate-enabled*)
+
+(defun skate-stick-axis ((raw int))
+  "Byte input around 128; scaled radial shaping remains in the recognizer."
+  (let* ((value (skate-physics-clamp (/ (- (the float raw) 128.0) 127.0) -1.0 1.0))
+         (dead (skate-physics-clamp (-> *skate-input-config* dead-zone) 0.0 0.8)))
+    (if (<= (fabs value) dead)
+        0.0
+        (* (if (< value 0.0) -1.0 1.0) (/ (- (fabs value) dead) (- 1.0 dead))))))
+
+(skate-runtime-reset!)
+)

@@ -1042,6 +1042,7 @@
                     )
                   )
              )
+    (#when PC_PORT (skate-runtime-reset!))
     (set! (-> self board latch?) #f)
     (mode-set! (-> self board main) (joint-mod-mode flex-blend))
     (mode-set! (-> self board upper-body) (joint-mod-mode flex-blend))
@@ -1128,6 +1129,93 @@
   (logtest? (-> self control status) (collide-status on-surface))
   )
 
+(#when PC_PORT
+
+(defbehavior target-skate-eligible? target ()
+  (skate-runtime-eligible?
+    *jak3-skate-enabled* (not (not *target-rc-board-controls*))
+    (not (not (or (-> self board stick-off)
+        (-> *setting-control* user-current player-control-override)
+        (!= self *target*) (paused?))))
+    (and (not (focus-test? self dead hit))
+         (case (-> self state name)
+           (('target-board-stance 'target-board-jump 'target-board-falling
+             'target-board-hit-ground 'target-board-ride-edge) #t)
+           (else #f))
+         (or (not (-> self next-state))
+             (case (-> self next-state name)
+               (('target-board-stance 'target-board-jump 'target-board-falling
+                 'target-board-hit-ground 'target-board-ride-edge) #t)
+               (else #f))))))
+
+(defbehavior target-skate-ground? target ()
+  (and (target-skate-eligible?) (board-on-ground?)
+       (= (-> self control ground-pat mode) (pat-mode ground))
+       (= (-> self control mod-surface) *board-walk-mods*)))
+
+(defbehavior target-skate-momentum target ()
+  (let* ((velocity (-> self control transv-ctrl))
+         (push (- (skate-stick-axis (the int (-> self control cpad lefty)))))
+         (friction (-> *jak3-skate-state* surface-friction))
+         (direction (if (< (-> velocity z) 0.0) -1.0 1.0)))
+    ;; Surface friction has already been removed from this per-target working
+    ;; copy; use the skate coefficient once. Gravity supplies slope acceleration.
+    (set! (-> velocity z)
+      (* direction 4096.0
+         (skate-speed-step (/ (fabs (-> velocity z)) 4096.0)
+                           (fmax push 0.0) (fmax (- push) 0.0)
+                           friction 0.0 (seconds-per-frame))))
+    (set! (-> velocity x)
+      (* 4096.0 (skate-lateral-step (/ (-> velocity x) 4096.0)
+                                  friction (seconds-per-frame))))
+    (set! (-> self board transv-max) (* 4096.0 (-> *skate-physics-config* speed-limit))))
+  (none))
+
+(defbehavior target-skate-sample target ()
+  (cond
+    ((target-skate-eligible?)
+     (set! (-> *jak3-skate-state* active?) #t)
+     (skate-input-sample! *skate-input-state* *skate-input-config*
+       (/ (- (the float (-> self control cpad rightx)) 128.0) 127.0)
+       (/ (- 128.0 (the float (-> self control cpad righty))) 127.0)
+       (seconds-per-frame))
+     (cond
+       ((and (target-skate-ground?) (can-jump? 'board)
+             (-> *skate-input-state* event))
+        (let ((trick (skate-input-consume! *skate-input-state*)))
+          (when (skate-trick-launch! *skate-tricks* trick (-> *skate-input-state* event-strength))
+            (set! (-> *jak3-skate-state* pop-speed)
+              (skate-pop-speed (-> *skate-input-state* event-preload-time)
+                               (-> *skate-input-state* event-flick-speed)))
+            (set! (-> *jak3-skate-state* ground?) #f)
+            (flush-trick-list (-> self board))
+            ;; Retain native jump animation, event and mission notification path.
+            ;; Equal min/max prevents vanilla X-hold duration from changing pop.
+            (go target-board-jump (meters 1) (meters 1) #f))))
+       ((and (not (board-on-ground?)) (= (-> *skate-tricks* phase) 'ground))
+        (skate-trick-fall! *skate-tricks*)))
+     (when (not (board-on-ground?))
+       (skate-trick-air-step! *skate-tricks* (seconds-per-frame) 0.0 #f)))
+    ((-> *jak3-skate-state* active?) (skate-runtime-reset!)))
+  (none))
+
+(defbehavior target-skate-contact target ()
+  (when (target-skate-eligible?)
+    (let ((contact? (or (board-on-ground?) (focus-test? self rail))))
+      (when (and contact? (not (-> *jak3-skate-state* ground?))
+                 (= (-> *skate-tricks* phase) 'airborne))
+        (let* ((velocity-angle (vector-y-angle (-> self control transv)))
+               (angle (/ (fabs (deg-diff (y-angle (-> self control)) velocity-angle)) 182.04445))
+               ;; Fakie/switch may be parallel in either direction; sideways fails.
+               (alignment (fmin angle (fabs (- 180.0 angle)))))
+          (skate-trick-land! *skate-tricks*
+            (-> *jak3-skate-state* incoming-impact) alignment)))
+      (when contact? (skate-trick-support! *skate-tricks* 'ground (seconds-per-frame)))
+      (set! (-> *jak3-skate-state* ground?) contact?)))
+  (none))
+
+)
+
 (defbehavior target-board-smack-surface? target ()
   (when (and (logtest? (-> self control status) (collide-status touch-wall))
              (< (+ (current-time) (seconds -0.05)) (-> self control last-time-touching-actor))
@@ -1144,7 +1232,7 @@
     )
   )
 
-(defbehavior board-add-thrust target ()
+(defbehavior board-add-thrust-original target ()
   (let ((gp-0 (-> self control transv-ctrl)))
     (let* ((v1-1 gp-0)
            (f0-7 (cond
@@ -1320,6 +1408,16 @@
     v0-0
     )
   )
+
+(defbehavior board-add-thrust target ()
+  (cond
+    ((#if PC_PORT (target-skate-ground?) #f)
+     (#when PC_PORT (target-skate-momentum)))
+    ;; No powered thrust in a skate jump: maintain collision-resolved momentum.
+    ((#if PC_PORT (and (target-skate-eligible?) (not (board-on-ground?))) #f)
+     (none))
+    (else (board-add-thrust-original)))
+  (none))
 
 (defbehavior target-board-exit-check target ()
   (if (and (or (and (cpad-pressed? (-> self control cpad number) r2)
@@ -1785,6 +1883,14 @@
   (when (-> self board board)
     (let ((a1-0 (-> self node-list data 37 bone transform)))
       (matrix->transformq (the-as transformq (-> self board board-trans)) a1-0)
+      (#when PC_PORT
+        (when (target-skate-eligible?)
+          ;; Rebuilt from the authored bone every frame: these rotations never
+          ;; accumulate and never affect rider/collision orientation.
+          (let ((deck (the-as quaternion (-> self board board-quat))))
+            (quaternion-rotate-local-z! deck deck (skate-trick-board-roll *skate-tricks*))
+            (quaternion-rotate-local-y! deck deck (skate-trick-board-yaw *skate-tricks*))
+            (quaternion-rotate-local-x! deck deck (skate-trick-board-pitch *skate-tricks*))))
       )
     (vector-copy! (-> self board board-scale) (-> self control scale))
     (let ((a0-4 (-> *target-shadow-control* settings shadow-dir quad)))
@@ -2020,6 +2126,7 @@
   )
 
 (defbehavior target-board-real-post target ()
+  (#when PC_PORT (target-skate-sample))
   (let ((f30-0 (-> self clock clock-ratio)))
     (let ((gp-1 (max 1 (the int (-> self clock time-adjust-ratio)))))
       (update-rates! (-> self clock) (/ f30-0 (the float gp-1)))
@@ -2028,6 +2135,19 @@
         (set! (-> self control remaining-ctrl-iterations) gp-1)
         (flag-setup)
         (target-board-pre-move)
+        (#when PC_PORT
+          (when (and (target-skate-eligible?)
+                     (or (target-skate-ground?) (= (-> *skate-tricks* phase) 'airborne)))
+            (set! (-> self control dynam gravity-length) (* 4096.0 (skate-gravity)))
+            (vector-float*! (-> self control dynam gravity)
+                           (-> self control dynam gravity-normal)
+                           (-> self control dynam gravity-length)))
+          (when (target-skate-ground?)
+            ;; current-surface is the per-target working surface, never the
+            ;; shared vanilla walk surface. Prevent a second friction pass.
+            (set! (-> *jak3-skate-state* surface-friction)
+              (skate-physics-clamp (/ (-> self control current-surface fric) 0.2) 0.0 4.0))
+            (set! (-> self control current-surface fric) 0.0)))
         (build-conversions (-> self control transv))
         (do-rotations1)
         (let ((s5-0 (new-stack-vector0)))
@@ -2053,7 +2173,15 @@
               (the-as rgba (new 'static 'rgba :g #xff :a #x80))
               )
             )
-          (turn-to-vector s5-0 (-> self control pad-magnitude))
+          (#when PC_PORT
+            (when (target-skate-ground?)
+              (quaternion-rotate-y! (-> self control dir-targ) (-> self control dir-targ)
+                (* (skate-carve-rate
+                     (skate-stick-axis (the int (-> self control cpad leftx)))
+                     (/ (-> self control ctrl-xz-vel) 4096.0)) (seconds-per-frame)))))
+          (if (#if PC_PORT (target-skate-ground?) #f)
+              (none)
+              (turn-to-vector s5-0 (-> self control pad-magnitude)))
           )
         (if (and (= (-> self control pad-magnitude) 0.0)
                  (>= (current-time) (-> self control turn-lockout-end-time))
@@ -2322,7 +2450,13 @@
             (seek! (-> self board cushion-offset) (-> *TARGET_BOARD-bank* cushion) (* 8192.0 (seconds-per-frame)))
             )
           )
+        (#when PC_PORT
+          (when (target-skate-eligible?)
+            (set! (-> *jak3-skate-state* incoming-impact)
+              (/ (fmax 0.0 (- (vector-dot (-> self control transv)
+                                         (-> self control dynam gravity-normal)))) 4096.0))))
         (target-board-collision)
+        (#when PC_PORT (target-skate-contact))
         (if (!= (-> self control bend-speed) 0.0)
             (bend-gravity)
             )

@@ -5,6 +5,9 @@
 ;; name in dgo: cam-states
 ;; dgos: GAME
 
+(#when PC_PORT
+  (define-extern skate-runtime-camera-owned? (function symbol)))
+
 ;; DECOMP BEGINS
 
 (defstate cam-no-trans (camera-slave)
@@ -2400,7 +2403,8 @@
     (if (logtest? (cam-slave-options BOMBBOT) (-> *camera* settings slave-options))
         (set! f28-0 0.0)
         )
-    (if (or (logtest? (cam-slave-options-u32 BLOCK_RIGHT_STICK) (-> self options))
+    (if (or (#if PC_PORT (skate-runtime-camera-owned?) #f)
+            (logtest? (cam-slave-options-u32 BLOCK_RIGHT_STICK) (-> self options))
             (logtest? (-> *camera* settings master-options) (cam-master-options BLOCK_RIGHT_STICK))
             )
         (set! f28-0 0.0)
@@ -2570,7 +2574,8 @@
         ;; (if (-> *camera* settings flip-horizontal)
         ;;     (set! f30-2 (- f30-2))
         ;;     )
-      (if (or (logtest? (cam-slave-options-u32 BLOCK_RIGHT_STICK) (-> self options))
+      (if (or (#if PC_PORT (skate-runtime-camera-owned?) #f)
+            (logtest? (cam-slave-options-u32 BLOCK_RIGHT_STICK) (-> self options))
               (logtest? (-> *camera* settings master-options) (cam-master-options BLOCK_RIGHT_STICK))
               )
           (set! f30-2 0.0)

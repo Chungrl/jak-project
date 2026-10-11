@@ -344,6 +344,10 @@
   "gun-states.o"
   "board-util.o"
   "board-nextgen.o" ;; added: default-off movement experiment
+  "skate-input.o"
+  "skate-physics.o"
+  "skate-tricks.o"
+  "skate-runtime.o"
   "target-board.o"
   "board-part.o"
   "board-states.o"

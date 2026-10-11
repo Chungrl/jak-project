@@ -86,3 +86,11 @@ transitions, mission compatibility, Windows builds, and GPU behavior remain unve
 Use [DESKTOP_HANDOFF.md](DESKTOP_HANDOFF.md) to continue on Windows. Keep all work
 on the feature branch and target pull requests at the user's fork. The repository's
 requested AI disclosure is in [AI_DISCLOSURE.md](AI_DISCLOSURE.md).
+# Current skating recovery status (AI-assisted)
+
+`jak3-skate-controls` preserves the interrupted work from `jak3-nextgen-lab`.
+The latest integration build fails; 25 earlier model tests passed. See
+[RECOVERY_STATUS.md](RECOVERY_STATUS.md) for evidence, incomplete features and
+the known scripted-state camera-ownership concern. No implementation was added
+during recovery. The project status below describes the historical lab foundation.
+

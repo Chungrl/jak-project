@@ -1,0 +1,170 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Asset-free Flickit recognizer. Coordinates are normalized: +x right, +y up.
+;; The target adapter owns controller/camera routing; this module never edits cpad.
+(#when PC_PORT
+
+(deftype skate-input-config (basic)
+  ((dead-zone float)
+   (preload-threshold float)
+   (flick-threshold float)
+   (side-threshold float)
+   (min-preload float)
+   (full-charge-time float)
+   (flick-window float)
+   (min-flick-speed float)
+   (buffer-window float)
+   (max-sample-gap float)
+   (sensitivity float)))
+
+(deftype skate-input-state (basic)
+  ((phase symbol)
+   (x float)
+   (y float)
+   (preload-x float)
+   (preload-y float)
+   (preload-origin-y float)
+   (preload-time float)
+   (flick-time float)
+   (event symbol)
+   (event-strength float)
+   (event-flick-speed float)
+   (event-preload-time float)
+   (event-age float)
+   (event-serial uint32)))
+
+(define *skate-input-config*
+  (new 'static 'skate-input-config
+    :dead-zone 0.18
+    :preload-threshold 0.55
+    :flick-threshold 0.65
+    :side-threshold 0.4
+    :min-preload 0.035
+    :full-charge-time 0.4
+    :flick-window 0.22
+    :min-flick-speed 4.0
+    :buffer-window 0.16
+    :max-sample-gap 0.12
+    :sensitivity 1.0))
+
+(define *skate-input-state*
+  (new 'static 'skate-input-state :phase 'ready :event #f))
+
+(defun skate-input-reset! ((state skate-input-state))
+  (set! (-> state phase) 'ready)
+  (set! (-> state x) 0.0)
+  (set! (-> state y) 0.0)
+  (set! (-> state preload-x) 0.0)
+  (set! (-> state preload-y) 0.0)
+  (set! (-> state preload-origin-y) 0.0)
+  (set! (-> state preload-time) 0.0)
+  (set! (-> state flick-time) 0.0)
+  (set! (-> state event) #f)
+  (set! (-> state event-strength) 0.0)
+  (set! (-> state event-flick-speed) 0.0)
+  (set! (-> state event-preload-time) 0.0)
+  (set! (-> state event-age) 0.0)
+  (set! (-> state event-serial) 0)
+  state)
+
+(defun skate-input-consume! ((state skate-input-state))
+  "Consume one buffered event; strength remains readable until another event."
+  (let ((event (-> state event)))
+    (set! (-> state event) #f)
+    event))
+
+(defun skate-input-charge ((state skate-input-state) (config skate-input-config))
+  (fmin 1.0
+    (/ (-> state preload-time) (fmax 0.001 (-> config full-charge-time)))))
+
+(defun skate-input-classify ((state skate-input-state) (config skate-input-config)
+                            (x float) (y float))
+  "Direction and preload path select the trick, including nollie variants."
+  (let ((nollie? (> (-> state preload-y) 0.0))
+        (diagonal-preload? (>= (fabs (-> state preload-x)) (-> config side-threshold))))
+    (cond
+      ((>= (* (- (-> state preload-y)) y) (-> config flick-threshold))
+       (cond
+         ((<= x (- (-> config side-threshold)))
+          (if diagonal-preload?
+              (if nollie? 'nollie-varial-kickflip 'varial-kickflip)
+              (if nollie? 'nollie-kickflip 'kickflip)))
+         ((>= x (-> config side-threshold))
+          (if diagonal-preload?
+              (if nollie? 'nollie-varial-heelflip 'varial-heelflip)
+              (if nollie? 'nollie-heelflip 'heelflip)))
+         (else (if nollie? 'nollie 'ollie))))
+      ((and (>= (fabs x) (-> config flick-threshold))
+            (< (fabs y) (-> config flick-threshold)))
+       (if (< x 0.0)
+           (if nollie? 'nollie-bs-shuvit 'bs-shuvit)
+           (if nollie? 'nollie-fs-shuvit 'fs-shuvit)))
+      (else #f))))
+
+(defun skate-input-sample! ((state skate-input-state) (config skate-input-config)
+                          (raw-x float) (raw-y float) (dt float))
+  "Sample once per unpaused frame; a long gap cancels stale gestures and events."
+  (cond
+    ((or (<= dt 0.0) (> dt (fmax 0.001 (-> config max-sample-gap))))
+     (skate-input-reset! state)
+     ;; A resume while the stick is held must pass through neutral before arming.
+     (set! (-> state phase) 'locked)
+     #f)
+    (else
+      (let* ((sensitivity (fmax 0.01 (-> config sensitivity)))
+             (x (fmax -1.0 (fmin 1.0 (* raw-x sensitivity))))
+             (y (fmax -1.0 (fmin 1.0 (* raw-y sensitivity))))
+             (neutral? (<= (+ (* x x) (* y y))
+                           (* (-> config dead-zone) (-> config dead-zone)))))
+        (set! (-> state x) x)
+        (set! (-> state y) y)
+        (when (-> state event)
+          (+! (-> state event-age) dt)
+          (when (> (-> state event-age) (fmax 0.0 (-> config buffer-window)))
+            (set! (-> state event) #f)))
+        (cond
+          ((= (-> state phase) 'locked)
+           (when neutral? (set! (-> state phase) 'ready)))
+          ((= (-> state phase) 'ready)
+           (when (>= (fabs y) (-> config preload-threshold))
+             (set! (-> state phase) 'preload)
+             (set! (-> state preload-y) (if (> y 0.0) 1.0 -1.0))
+             (set! (-> state preload-origin-y) y)
+             (set! (-> state preload-x) x)
+             (set! (-> state preload-time) dt)
+             (set! (-> state flick-time) 0.0)))
+          ((= (-> state phase) 'preload)
+           (cond
+             ((>= (* y (-> state preload-y)) (-> config preload-threshold))
+              (+! (-> state preload-time) dt)
+              (when (> (fabs y) (fabs (-> state preload-origin-y)))
+                (set! (-> state preload-origin-y) y))
+              ;; Retain the lateral preload path instead of only its last frame.
+              (when (> (fabs x) (fabs (-> state preload-x)))
+                (set! (-> state preload-x) x)))
+             ((< (-> state preload-time) (fmax 0.0 (-> config min-preload)))
+              (set! (-> state phase) (if neutral? 'ready 'locked)))
+             (else
+               (set! (-> state phase) 'flick)
+               (set! (-> state flick-time) 0.0)))))
+        ;; Process the release in this same sample, even for a fast one-frame flick.
+        (when (= (-> state phase) 'flick)
+          (+! (-> state flick-time) dt)
+          (if (> (-> state flick-time) (fmax 0.001 (-> config flick-window)))
+              (set! (-> state phase) (if neutral? 'ready 'locked))
+              (let* ((trick (skate-input-classify state config x y))
+                     (dy (- y (-> state preload-origin-y)))
+                     (dx (- x (-> state preload-x)))
+                     (speed (/ (sqrtf (+ (* dx dx) (* dy dy))) (-> state flick-time))))
+                (when (and trick (>= speed (fmax 0.0 (-> config min-flick-speed))))
+                  (set! (-> state event) trick)
+                  (set! (-> state event-strength) (skate-input-charge state config))
+                  (set! (-> state event-flick-speed) speed)
+                  (set! (-> state event-preload-time) (-> state preload-time))
+                  (set! (-> state event-age) 0.0)
+                  (+! (-> state event-serial) 1)
+                  (set! (-> state phase) 'locked)))))
+        (-> state event)))))
+
+)

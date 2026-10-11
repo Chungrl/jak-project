@@ -1,0 +1,328 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; Skate control lab: deterministic trick/combo model. No process, asset, HUD,
+;; collision, or mission scoring dependencies. The board adapter supplies real
+;; contact, impact speed in m/s, alignment error in degrees, and elapsed seconds.
+(#when PC_PORT
+
+(deftype skate-trick-config (structure)
+  ((flip-duration float)
+   (shuvit-duration float)
+   (compound-duration float)
+   (late-speed float)
+   (completion-threshold float)
+   (clean-impact float)
+   (bail-impact float)
+   (clean-alignment float)
+   (bail-alignment float)
+   (link-window float)
+   (support-min-time float)
+   (grab-min-time float)
+   (multiplier-cap int)))
+
+(define *skate-trick-config*
+  (new 'static 'skate-trick-config
+    :flip-duration 0.48 :shuvit-duration 0.36 :compound-duration 0.62
+    :late-speed 0.85 :completion-threshold 0.95
+    :clean-impact 8.0 :bail-impact 16.0
+    :clean-alignment 20.0 :bail-alignment 55.0
+    :link-window 1.5 :support-min-time 0.2 :grab-min-time 0.12
+    :multiplier-cap 8))
+
+(deftype skate-trick-state (structure)
+  ((phase symbol)
+   (trick symbol)
+   (last-trick symbol)
+   (late-trick symbol)
+   (landing-quality symbol)
+   (elapsed float)
+   (duration float)
+   (late-elapsed float)
+   (late-duration float)
+   (charge float)
+   (body-rotation float)
+   (grab-time float)
+   (support-time float)
+   (idle-time float)
+   (combo-points float)
+   (banked-points float)
+   (combo-count int)
+   (multiplier int)))
+
+(define *skate-tricks* (new 'static 'skate-trick-state))
+
+(defun skate-trick-reset! ((state skate-trick-state))
+  (set! (-> state phase) 'ground)
+  (set! (-> state trick) 'none)
+  (set! (-> state last-trick) 'none)
+  (set! (-> state late-trick) 'none)
+  (set! (-> state landing-quality) 'none)
+  (set! (-> state elapsed) 0.0)
+  (set! (-> state duration) 0.0)
+  (set! (-> state late-elapsed) 0.0)
+  (set! (-> state late-duration) 0.0)
+  (set! (-> state charge) 0.0)
+  (set! (-> state body-rotation) 0.0)
+  (set! (-> state grab-time) 0.0)
+  (set! (-> state support-time) 0.0)
+  (set! (-> state idle-time) 0.0)
+  (set! (-> state combo-points) 0.0)
+  (set! (-> state banked-points) 0.0)
+  (set! (-> state combo-count) 0)
+  (set! (-> state multiplier) 1)
+  (none))
+
+(defun skate-trick-duration ((trick symbol))
+  (case trick
+    (('ollie 'nollie) 0.0)
+    (('kickflip 'heelflip 'nollie-kickflip 'nollie-heelflip)
+     (-> *skate-trick-config* flip-duration))
+    (('bs-shuvit 'fs-shuvit 'nollie-bs-shuvit 'nollie-fs-shuvit)
+     (-> *skate-trick-config* shuvit-duration))
+    (('varial-kickflip 'varial-heelflip 'nollie-varial-kickflip 'nollie-varial-heelflip)
+     (-> *skate-trick-config* compound-duration))
+    (else -1.0)))
+
+(defun skate-trick-base-points ((trick symbol))
+  (case trick
+    (('ollie) 50.0)
+    (('nollie) 75.0)
+    (('kickflip 'heelflip) 150.0)
+    (('nollie-kickflip 'nollie-heelflip) 200.0)
+    (('bs-shuvit 'fs-shuvit) 100.0)
+    (('nollie-bs-shuvit 'nollie-fs-shuvit) 150.0)
+    (('varial-kickflip 'varial-heelflip) 300.0)
+    (('nollie-varial-kickflip 'nollie-varial-heelflip) 350.0)
+    (else 0.0)))
+
+(defun skate-trick-name ((trick symbol))
+  (case trick
+    (('ollie) "Ollie") (('nollie) "Nollie")
+    (('kickflip) "Kickflip") (('heelflip) "Heelflip")
+    (('bs-shuvit) "BS Shuvit") (('fs-shuvit) "FS Shuvit")
+    (('varial-kickflip) "Varial Kickflip") (('varial-heelflip) "Varial Heelflip")
+    (('nollie-kickflip) "Nollie Kickflip") (('nollie-heelflip) "Nollie Heelflip")
+    (('nollie-bs-shuvit) "Nollie BS Shuvit") (('nollie-fs-shuvit) "Nollie FS Shuvit")
+    (('nollie-varial-kickflip) "Nollie Varial Kickflip")
+    (('nollie-varial-heelflip) "Nollie Varial Heelflip")
+    (('manual) "Manual") (('nose-manual) "Nose Manual")
+    (('grind) "Grind") (('slide) "Boardslide") (('grab) "Grab")
+    (('bail) "Bail") (else "Ride")))
+
+(defun skate-trick-award! ((state skate-trick-state) (trick symbol) (points float))
+  (when (> points 0.0)
+    ;; A trick repeated consecutively has half value. Multiplier is separately
+    ;; applied when banking so display and failure handling remain unambiguous.
+    (+! (-> state combo-points)
+        (* points (if (= trick (-> state last-trick)) 0.5 1.0)))
+    (+! (-> state combo-count) 1)
+    (set! (-> state multiplier)
+          (min (-> *skate-trick-config* multiplier-cap) (-> state combo-count)))
+    (set! (-> state last-trick) trick)
+    (set! (-> state idle-time) 0.0))
+  (none))
+
+(defun skate-trick-bank! ((state skate-trick-state))
+  (+! (-> state banked-points)
+      (* (-> state combo-points) (the float (-> state multiplier))))
+  (set! (-> state combo-points) 0.0)
+  (set! (-> state combo-count) 0)
+  (set! (-> state multiplier) 1)
+  (set! (-> state idle-time) 0.0)
+  ;; A bank ends repetition tracking as well as the multiplier.
+  (set! (-> state last-trick) 'none)
+  (none))
+
+(defun skate-trick-support-end! ((state skate-trick-state))
+  (when (and (>= (-> state support-time) (-> *skate-trick-config* support-min-time))
+             (or (= (-> state phase) 'manual) (= (-> state phase) 'nose-manual)
+                 (= (-> state phase) 'grind) (= (-> state phase) 'slide)))
+    (skate-trick-award! state (-> state phase)
+      (* (-> state support-time)
+         (if (or (= (-> state phase) 'grind) (= (-> state phase) 'slide))
+             180.0 100.0))))
+  (set! (-> state support-time) 0.0)
+  (none))
+
+(defun skate-trick-launch! ((state skate-trick-state) (trick symbol) (charge float))
+  "Accept a known trick from a supported state; return #f for an invalid launch."
+  (if (or (not (or (= (-> state phase) 'ground) (= (-> state phase) 'manual)
+                   (= (-> state phase) 'nose-manual) (= (-> state phase) 'grind)
+                   (= (-> state phase) 'slide)))
+          (< (skate-trick-duration trick) 0.0))
+      #f
+      (begin
+        (skate-trick-support-end! state)
+        (set! (-> state phase) 'airborne)
+        (set! (-> state trick) trick)
+        (set! (-> state late-trick) 'none)
+        (set! (-> state landing-quality) 'none)
+        (set! (-> state elapsed) 0.0)
+        (set! (-> state duration) (skate-trick-duration trick))
+        (set! (-> state late-elapsed) 0.0)
+        (set! (-> state late-duration) 0.0)
+        (set! (-> state charge) (fmax 0.0 (fmin 1.0 charge)))
+        (set! (-> state body-rotation) 0.0)
+        (set! (-> state grab-time) 0.0)
+        (set! (-> state idle-time) 0.0)
+        #t)))
+
+(defun skate-trick-progress ((elapsed float) (duration float))
+  (if (<= duration 0.0) 1.0 (fmin 1.0 (fmax 0.0 (/ elapsed duration)))))
+
+(defun skate-trick-fall! ((state skate-trick-state))
+  "Observe uncommanded loss of support without awarding a fictitious ollie."
+  (if (skate-trick-launch! state 'ollie 0.0)
+      (begin (set! (-> state trick) 'none) #t)
+      #f))
+
+(defun skate-trick-complete? ((state skate-trick-state))
+  (and (>= (skate-trick-progress (-> state elapsed) (-> state duration))
+           (-> *skate-trick-config* completion-threshold))
+       (or (= (-> state late-trick) 'none)
+           (>= (skate-trick-progress (-> state late-elapsed) (-> state late-duration))
+               (-> *skate-trick-config* completion-threshold)))))
+
+(defun skate-trick-late! ((state skate-trick-state) (trick symbol))
+  "One genuine late trick after the initial board motion completes, before contact."
+  (if (and (= (-> state phase) 'airborne) (= (-> state late-trick) 'none)
+           (>= (-> state elapsed) 0.15) (skate-trick-complete? state)
+           (> (skate-trick-duration trick) 0.0))
+      (begin
+        (set! (-> state late-trick) trick)
+        (set! (-> state late-elapsed) 0.0)
+        (set! (-> state late-duration)
+              (* (skate-trick-duration trick) (-> *skate-trick-config* late-speed)))
+        #t)
+      #f))
+
+(defun skate-trick-air-step! ((state skate-trick-state) (dt float) (body-turn float) (grab? symbol))
+  "body-turn is this frame's signed degree increment, never a frame-rate-dependent rate."
+  (when (= (-> state phase) 'airborne)
+    (let ((step (fmax 0.0 dt)))
+      (+! (-> state elapsed) step)
+      (+! (-> state body-rotation) body-turn)
+      (when (!= (-> state late-trick) 'none)
+        (+! (-> state late-elapsed) step))
+      (when grab? (+! (-> state grab-time) step))))
+  (none))
+
+(defun skate-trick-bail! ((state skate-trick-state))
+  ;; Banked points survive; every unbanked linked trick is lost.
+  (set! (-> state phase) 'bail)
+  (set! (-> state landing-quality) 'bail)
+  (set! (-> state last-trick) 'bail)
+  (set! (-> state combo-points) 0.0)
+  (set! (-> state combo-count) 0)
+  (set! (-> state multiplier) 1)
+  (set! (-> state support-time) 0.0)
+  (set! (-> state idle-time) 0.0)
+  'bail)
+
+(defun skate-trick-land! ((state skate-trick-state) (impact float) (alignment float))
+  "Only a real airborne->contact edge can score. A repeated contact is a no-op."
+  (cond
+    ((!= (-> state phase) 'airborne) (-> state landing-quality))
+    ((or (not (skate-trick-complete? state))
+         (> (fabs impact) (-> *skate-trick-config* bail-impact))
+         (> (fabs alignment) (-> *skate-trick-config* bail-alignment)))
+     (skate-trick-bail! state))
+    (else
+      (let* ((quality (if (or (> (fabs impact) (-> *skate-trick-config* clean-impact))
+                             (> (fabs alignment) (-> *skate-trick-config* clean-alignment)))
+                         'sketchy 'clean))
+             (scale (if (= quality 'sketchy) 0.5 1.0))
+             ;; Accumulating per-frame float angles can leave 360 degrees a few
+             ;; ulps short. A 0.01 degree tolerance keeps scoring stable at
+             ;; 30/60/120 Hz without rounding unfinished spins to completion.
+             (spins (the int (/ (+ (fabs (-> state body-rotation)) 0.01) 180.0))))
+        (set! (-> state landing-quality) quality)
+        (skate-trick-award! state (-> state trick)
+          (* scale (+ (skate-trick-base-points (-> state trick)) (* 100.0 (the float spins)))))
+        (when (!= (-> state late-trick) 'none)
+          (skate-trick-award! state (-> state late-trick)
+            (* scale 1.25 (skate-trick-base-points (-> state late-trick)))))
+        (when (>= (-> state grab-time) (-> *skate-trick-config* grab-min-time))
+          (skate-trick-award! state 'grab (* scale 75.0)))
+        (set! (-> state phase) 'ground)
+        (set! (-> state idle-time) 0.0)
+        quality))))
+
+(defun skate-trick-support! ((state skate-trick-state) (support symbol) (dt float))
+  "Contact adapter supplies ground/manual/nose-manual/grind/slide. Air and bails cannot accrue support."
+  (when (and (!= (-> state phase) 'airborne) (!= (-> state phase) 'bail)
+             (or (= support 'ground) (= support 'manual) (= support 'nose-manual)
+                 (= support 'grind) (= support 'slide)))
+    (when (!= support (-> state phase))
+      (skate-trick-support-end! state)
+      (set! (-> state phase) support))
+    (if (= support 'ground)
+        (begin
+          (+! (-> state idle-time) (fmax 0.0 dt))
+          (when (and (> (-> state combo-count) 0)
+                     (>= (-> state idle-time) (-> *skate-trick-config* link-window)))
+            (skate-trick-bank! state)))
+        (begin
+          (+! (-> state support-time) (fmax 0.0 dt))
+          (set! (-> state idle-time) 0.0))))
+  (-> state phase))
+
+(defun skate-trick-recover! ((state skate-trick-state))
+  "Called by the adapter after its bail lockout, without resetting banked score."
+  (when (= (-> state phase) 'bail)
+    (set! (-> state phase) 'ground)
+    (set! (-> state trick) 'none)
+    (set! (-> state late-trick) 'none))
+  (none))
+
+(defun skate-trick-roll-turns ((trick symbol))
+  (case trick
+    (('kickflip 'varial-kickflip 'nollie-kickflip 'nollie-varial-kickflip) -1.0)
+    (('heelflip 'varial-heelflip 'nollie-heelflip 'nollie-varial-heelflip) 1.0)
+    (else 0.0)))
+
+(defun skate-trick-yaw-turns ((trick symbol))
+  (case trick
+    (('bs-shuvit 'varial-kickflip 'nollie-bs-shuvit 'nollie-varial-kickflip) -0.5)
+    (('fs-shuvit 'varial-heelflip 'nollie-fs-shuvit 'nollie-varial-heelflip) 0.5)
+    (else 0.0)))
+
+(defun skate-trick-board-roll ((state skate-trick-state))
+  "Procedural visual angle in GOAL angular units. Adapter must isolate the board joint."
+  (if (= (-> state phase) 'airborne)
+      (* 65536.0 (+ (* (skate-trick-roll-turns (-> state trick))
+                      (skate-trick-progress (-> state elapsed) (-> state duration)))
+                   (* (skate-trick-roll-turns (-> state late-trick))
+                      (skate-trick-progress (-> state late-elapsed) (-> state late-duration)))))
+      0.0))
+
+(defun skate-trick-board-yaw ((state skate-trick-state))
+  (if (= (-> state phase) 'airborne)
+      (* 65536.0 (+ (* (skate-trick-yaw-turns (-> state trick))
+                      (skate-trick-progress (-> state elapsed) (-> state duration)))
+                   (* (skate-trick-yaw-turns (-> state late-trick))
+                      (skate-trick-progress (-> state late-elapsed) (-> state late-duration)))))
+      0.0))
+
+(defun skate-trick-board-pitch ((state skate-trick-state))
+  "Procedural tail/nose pop and manual pose; feet/IK still require authored tuning."
+  (case (-> state phase)
+    (('manual) 2184.5334) ;; 12 degrees in GOAL angular units
+    (('nose-manual) -2184.5334)
+    (('airborne)
+     (let ((pop (skate-trick-progress (-> state elapsed) 0.2))
+           (direction
+             (case (-> state trick)
+               (('nollie 'nollie-kickflip 'nollie-heelflip 'nollie-bs-shuvit
+                 'nollie-fs-shuvit 'nollie-varial-kickflip 'nollie-varial-heelflip) -1.0)
+               (('none) 0.0)
+               (else 1.0))))
+       ;; The parabola reaches zero at both ends, so the adapter need not
+       ;; retain per-joint animation state or introduce a launch discontinuity.
+       (* direction 1820.4445 4.0 pop (- 1.0 pop))))
+    (else 0.0)))
+
+(skate-trick-reset! *skate-tricks*)
+
+)
