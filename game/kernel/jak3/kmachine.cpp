@@ -23,6 +23,7 @@
 #include "game/kernel/jak3/kdgo.h"
 #include "game/kernel/jak3/klisten.h"
 #include "game/kernel/jak3/kmachine_extras.h"
+#include "game/kernel/jak3/skate3_bridge.h"
 #include "game/kernel/jak3/kmalloc.h"
 #include "game/kernel/jak3/kscheme.h"
 #include "game/kernel/jak3/ksound.h"
@@ -433,6 +434,9 @@ void InitMachine_PCPort() {
   make_function_symbol_from_c("__pc-get-tex-remap", (void*)lookup_jak3_texture_dest_offset);
   make_function_symbol_from_c("pc-init-autosplitter-struct",
                               (void*)kmachine_extras::init_autosplit_struct);
+
+  // (AI-assisted) optional external Skate 3 gameplay engine
+  make_function_symbol_from_c("pc-skate3-bridge", (void*)skate3_bridge::pc_skate3_bridge);
 
   // discord rich presence
   make_function_symbol_from_c("pc-discord-rpc-update", (void*)kmachine_extras::update_discord_rpc);

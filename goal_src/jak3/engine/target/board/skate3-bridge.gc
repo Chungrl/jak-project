@@ -1,0 +1,132 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Optional bridge to an external Skate 3 gameplay engine.
+;;
+;; The engine is not part of this project. gk loads it at run time from the
+;; library named by OPENGOAL_SKATE3_DLL, with data the player converted from
+;; their own copy of Skate 3 (OPENGOAL_SKATE3_ASSETS). See
+;; game/kernel/jak3/skate3_bridge.h. Default off; with the bridge disabled or
+;; unavailable the jetboard behaves exactly as before.
+;;
+;; First demonstration only: the engine rides a flat plane laid at the height
+;; where the bridge was activated, and its board position replaces Jak's after
+;; the normal board update. Level collision, grinds and animation are not wired.
+
+(#when PC_PORT
+
+;; Mirrors jak3::skate3_bridge::BridgeIO. Game units and game axes throughout.
+(deftype skate3-bridge-io (structure)
+  ((position      vector :inline) ;; in: activation position. out: skater root
+   (velocity      vector :inline) ;; out: board velocity, units per second
+   (forward       vector :inline) ;; in: activation facing. out: flattened travel direction
+   (command       int32)          ;; in: 0 step, 1 activate, 2 shutdown
+   (status        int32)          ;; out: 0 ok, negative on failure
+   (buttons       uint32)         ;; in: XInput button bits
+   (left-x        float)          ;; in: sticks, -1..1, up and right positive
+   (left-y        float)
+   (right-x       float)
+   (right-y       float)
+   (left-trigger  float)          ;; in: 0..1
+   (right-trigger float)
+   (state         uint32)         ;; out: 100s riding, 200s air, 300 bail, 400s grind
+   (wheels        uint32)         ;; out: wheels on the ground
+   (pops          uint32)         ;; out: counters, only ever increase
+   (landings      uint32)
+   (grinds        uint32)
+   (bails         uint32)
+   (tick          uint32)         ;; out: engine steps since the session started
+   )
+  :size-assert #x70
+  )
+
+(define-extern pc-skate3-bridge (function skate3-bridge-io int))
+
+(define *jak3-skate3-bridge-enabled* #f)
+(define *jak3-skate3-bridge-active* #f)
+;; When #t the pad is not read, so a test can drive the input fields directly.
+(define *jak3-skate3-bridge-scripted-input* #f)
+(define *skate3-bridge-io* (new 'global 'skate3-bridge-io))
+
+(defun skate3-bridge-stick ((raw int) (invert symbol))
+  "Byte stick axis around 128 to -1..1. The pad's vertical axes grow downward."
+  (let ((value (fmax -1.0 (fmin 1.0 (/ (- (the float raw) 128.0) 127.0)))))
+    (if invert (- value) value)))
+
+(defun skate3-bridge-read-pad! ((io skate3-bridge-io) (pad cpad-info))
+  "Translate the pad to the Xbox layout Skate 3 expects. R2 is left to the
+   jetboard's own dismount."
+  (set! (-> io left-x) (skate3-bridge-stick (the-as int (-> pad leftx)) #f))
+  (set! (-> io left-y) (skate3-bridge-stick (the-as int (-> pad lefty)) #t))
+  (set! (-> io right-x) (skate3-bridge-stick (the-as int (-> pad rightx)) #f))
+  (set! (-> io right-y) (skate3-bridge-stick (the-as int (-> pad righty)) #t))
+  (let ((held (-> pad button0-abs 0))
+        (buttons 0))
+    (if (logtest? held (pad-buttons up)) (logior! buttons #x1))
+    (if (logtest? held (pad-buttons down)) (logior! buttons #x2))
+    (if (logtest? held (pad-buttons left)) (logior! buttons #x4))
+    (if (logtest? held (pad-buttons right)) (logior! buttons #x8))
+    (if (logtest? held (pad-buttons l1)) (logior! buttons #x100))
+    (if (logtest? held (pad-buttons r1)) (logior! buttons #x200))
+    (if (logtest? held (pad-buttons x)) (logior! buttons #x1000))
+    (if (logtest? held (pad-buttons circle)) (logior! buttons #x2000))
+    (if (logtest? held (pad-buttons square)) (logior! buttons #x4000))
+    (if (logtest? held (pad-buttons triangle)) (logior! buttons #x8000))
+    (set! (-> io buttons) (the-as uint buttons))
+    (set! (-> io left-trigger) (if (logtest? held (pad-buttons l2)) 1.0 0.0))
+    (set! (-> io right-trigger) 0.0))
+  (none))
+
+(defun skate3-bridge-clear-input! ((io skate3-bridge-io))
+  (set! (-> io buttons) (the-as uint 0))
+  (set! (-> io left-x) 0.0)
+  (set! (-> io left-y) 0.0)
+  (set! (-> io right-x) 0.0)
+  (set! (-> io right-y) 0.0)
+  (set! (-> io left-trigger) 0.0)
+  (set! (-> io right-trigger) 0.0)
+  (none))
+
+(defbehavior target-skate3-bridge-activate target ()
+  "Start the engine under Jak. Blocks for several seconds the first time."
+  (let ((io *skate3-bridge-io*))
+    (set! (-> io command) 1)
+    (vector-copy! (-> io position) (-> self control trans))
+    (vector-z-quaternion! (-> io forward) (-> self control quat))
+    (skate3-bridge-clear-input! io)
+    (set! *jak3-skate3-bridge-active* (= (pc-skate3-bridge io) 0))
+    ;; A failed start turns the bridge off so it is not retried every frame.
+    (if (not *jak3-skate3-bridge-active*)
+        (set! *jak3-skate3-bridge-enabled* #f)))
+  *jak3-skate3-bridge-active*)
+
+(defbehavior target-skate3-bridge-step target ()
+  "Run one engine step and put Jak where the engine's board is."
+  (let ((io *skate3-bridge-io*))
+    (set! (-> io command) 0)
+    (if (not *jak3-skate3-bridge-scripted-input*)
+        (skate3-bridge-read-pad! io (-> self control cpad)))
+    (cond
+      ((= (pc-skate3-bridge io) 0)
+       (move-to-point! (-> self control) (-> io position))
+       (vector-copy! (-> self control transv) (-> io velocity))
+       (forward-up-nopitch->quaternion (-> self control quat) (-> io forward) *up-vector*)
+       (quaternion-copy! (-> self control quat-for-control) (-> self control quat))
+       (quaternion-copy! (-> self control dir-targ) (-> self control quat)))
+      (else
+       (set! *jak3-skate3-bridge-active* #f)
+       (set! *jak3-skate3-bridge-enabled* #f))))
+  (none))
+
+(defbehavior target-skate3-bridge-post target ()
+  "Called after the normal jetboard update."
+  (cond
+    ((not *jak3-skate3-bridge-enabled*)
+     (set! *jak3-skate3-bridge-active* #f))
+    ((not *jak3-skate3-bridge-active*)
+     (target-skate3-bridge-activate))
+    (else
+     (target-skate3-bridge-step)))
+  (none))
+
+)

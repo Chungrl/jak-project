@@ -348,6 +348,7 @@
   "skate-physics.o"
   "skate-tricks.o"
   "skate-runtime.o"
+  "skate3-bridge.o"
   "target-board.o"
   "board-part.o"
   "board-states.o"

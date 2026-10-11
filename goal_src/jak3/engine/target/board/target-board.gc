@@ -3070,6 +3070,7 @@
 
 (defbehavior target-board-post target ()
   (target-board-real-post)
+  (#when PC_PORT (target-skate3-bridge-post))
   (none)
   )
 

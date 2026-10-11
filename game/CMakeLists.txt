@@ -143,6 +143,7 @@ set(RUNTIME_SOURCE
         kernel/jak3/klisten.cpp
         kernel/jak3/kmachine.cpp
         kernel/jak3/kmachine_extras.cpp
+        kernel/jak3/skate3_bridge.cpp
         kernel/jak3/kmalloc.cpp
         kernel/jak3/kmemcard.cpp
         kernel/jak3/kprint.cpp

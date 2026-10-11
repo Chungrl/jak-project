@@ -1,0 +1,88 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Manual scripted check of the Skate 3 bridge. Not part of any DGO.
+;; With gk running in debug mode and the bridge configured (see
+;; game/kernel/jak3/skate3_bridge.h), connect a REPL and load this file:
+;;   (lt)
+;;   (ml "goal_src/jak3/pc/debug/skate3-bridge-test.gc")
+;; It mounts the jetboard where Jak stands, enables the bridge with scripted input
+;; (idle, hold push, then flick the right stick down and up) and prints
+;; "SK3TEST" lines to the gk console. No pad is read while it runs.
+
+(define *sk3-test-base-tick* -1)
+
+(defun sk3-test-log ((label string))
+  (let ((io *skate3-bridge-io*))
+    ;; format takes at most eight arguments, so the line is written in two parts
+    (format 0 "SK3TEST ~S step ~D state ~D wheels ~D pops ~D landings ~D"
+            label
+            (- (the-as int (-> io tick)) *sk3-test-base-tick*)
+            (-> io state) (-> io wheels) (-> io pops) (-> io landings))
+    (format 0 " bails ~D pos ~m ~m ~m speed ~m~%"
+            (-> io bails)
+            (-> *target* control trans x) (-> *target* control trans y) (-> *target* control trans z)
+            (vector-length (-> io velocity))))
+  (none))
+
+(defun sk3-test-script-input ((step int))
+  "Scripted pad for the engine step about to run."
+  (let ((io *skate3-bridge-io*))
+    (skate3-bridge-clear-input! io)
+    (cond
+      ;; hold A (push) for five seconds
+      ((and (>= step 120) (< step 420)) (set! (-> io buttons) (the-as uint #x1000)))
+      ;; Flickit ollie: right stick down, then up
+      ((and (>= step 540) (< step 549)) (set! (-> io right-y) -1.0))
+      ((and (>= step 549) (< step 554)) (set! (-> io right-y) 1.0))))
+  (none))
+
+(process-spawn-function process :name "sk3-test"
+  (lambda :behavior process ()
+    (format 0 "SK3TEST begin~%")
+    ;; Uses wherever the debug boot put Jak. Restarting the game from here
+    ;; (initialize!) shuts the runtime down and takes this process with it.
+    (until (and *target* (!= (-> *target* next-state name) 'target-continue))
+      (suspend))
+    (dotimes (i 120) (suspend))
+    (format 0 "SK3TEST level ready, target state ~A~%" (-> *target* state name))
+    (logior! (-> *game-info* features) (game-feature board))
+    (logior! (-> *game-info* debug-features) (game-feature board))
+    (send-event *target* 'change-mode 'board #f)
+    (dotimes (i 180) (suspend))
+    (format 0 "SK3TEST on board, target state ~A pos ~m ~m ~m~%" (-> *target* state name)
+            (-> *target* control trans x) (-> *target* control trans y) (-> *target* control trans z))
+    (set! *jak3-skate3-bridge-scripted-input* #t)
+    (skate3-bridge-clear-input! *skate3-bridge-io*)
+    (set! *jak3-skate3-bridge-enabled* #t)
+    ;; the first activation blocks inside the engine for several seconds
+    (let ((waited 0))
+      (until (or *jak3-skate3-bridge-active* (not *jak3-skate3-bridge-enabled*) (> waited 600))
+        (+! waited 1)
+        (suspend)))
+    (cond
+      ((not *jak3-skate3-bridge-active*)
+       (format 0 "SK3TEST FAILED bridge did not activate, status ~D~%" (-> *skate3-bridge-io* status)))
+      (else
+       (set! *sk3-test-base-tick* (the-as int (-> *skate3-bridge-io* tick)))
+       (sk3-test-log "active")
+       (let ((last-pops (-> *skate3-bridge-io* pops))
+             (peak-y (-> *target* control trans y))
+             (start-y (-> *target* control trans y)))
+         (while (and *jak3-skate3-bridge-active* *target*
+                     (< (- (the-as int (-> *skate3-bridge-io* tick)) *sk3-test-base-tick*) 780))
+           (let ((step (- (the-as int (-> *skate3-bridge-io* tick)) *sk3-test-base-tick*)))
+             (sk3-test-script-input step)
+             (set! peak-y (fmax peak-y (-> *target* control trans y)))
+             (when (!= last-pops (-> *skate3-bridge-io* pops))
+               (set! last-pops (-> *skate3-bridge-io* pops))
+               (sk3-test-log "pop"))
+             (if (= (mod step 60) 0) (sk3-test-log "tick")))
+           (suspend))
+         (sk3-test-log "end")
+         (format 0 "SK3TEST peak height above start ~m, target state ~A, bridge active ~A~%"
+                 (- peak-y start-y) (if *target* (-> *target* state name) #f) *jak3-skate3-bridge-active*))))
+    (set! *jak3-skate3-bridge-enabled* #f)
+    (set! *jak3-skate3-bridge-scripted-input* #f)
+    (format 0 "SK3TEST done~%"))
+  :to *display-pool*)
