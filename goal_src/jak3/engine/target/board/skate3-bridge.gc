@@ -89,7 +89,7 @@
 ;; and in his world; larger values scale the board, the speeds and the heights
 ;; up together. Changing it takes effect the next time the board is mounted or
 ;; the bridge is switched on, and restarts the engine (several seconds).
-(define *jak3-skate3-bridge-world-scale* 1.3)
+(define *jak3-skate3-bridge-world-scale* 1.6)
 ;; The jetboard damages anything it touches, which turns bystanders hostile.
 ;; While the bridge drives the board that is switched off unless this is #f.
 (define *jak3-skate3-bridge-harmless* #t)
