@@ -1,7 +1,9 @@
 # Jak 3 skate: baseline and proposed ticket backlog (AI-assisted)
 
-Written 2026-10-12 by the planning session. Nothing here has been created on
-GitHub. It is a proposal for review.
+Written 2026-10-12 by the planning session. The owner approved it the same
+day and the tickets were created as issues on the fork; their numbers are at
+the end. The issues are the live copy: this document is the plan they came
+from.
 
 ## Baseline
 
@@ -10,7 +12,7 @@ GitHub. It is a proposal for review.
 | Repository | `C:\Users\Alan\Projects\jak3-opus\jak-project` (git worktree) |
 | Branch | `experiment/opus-skate-review` |
 | Last verified code | `b8dbedaad` |
-| On GitHub | No. The branch tracks `origin/jak3-skate-controls` (`6b30da8e8`) and is 24 commits ahead of it, 0 behind. No remote branch contains `b8dbedaad`. |
+| On GitHub | Yes, since 2026-10-12: pushed as `experiment/opus-skate-review`, and the unverified level shadows as `wip/level-shadows`. `jak3-skate-controls` (draft pull request 3) was left as it was, 24 commits behind. |
 | Unverified work | Level shadows, first version, on its own branch `wip/level-shadows` (`58aea2d45`, one commit on top of `a60c7031c`): 11 files changed and 2 new shaders under `game/graphics/` plus `kmachine.cpp`, `kernel-defs.gc`, `pckernel.gc`. It compiles and has never been run. |
 | Outside git | `C:\Users\Alan\Projects\skate3-work`: the engine sources with local additions (rail debug exports, spin naming), the built `skate_ffi.dll`, the converted Skate 3 data, the test scripts (`tools\`), the agents' brief (`AGENT_BRIEF.md`). None of it is version controlled. |
 
@@ -99,7 +101,7 @@ one at a time.
 
 ### Infrastructure
 
-**[infra-01] Test scripts in the repository, without fixed paths** (`agent:codex`, ready)
+**[infra-01] Test scripts in the repository, without fixed paths** (`agent:codex`, blocked on infra-02)
 - Scope: copy `build.sh`, `run-skate-test.sh`, `check-and-run.sh`, `run-skate-keys.sh`, `keys.py`, `shoot.sh`, `montage.py` from `skate3-work\tools` to `scripts/jak3-skate/`; take the repository from the script's own location and the work folder from `JAK3_SKATE_WORK`; add `verify.sh`; move the agents' brief to `docs/jak3-skate/AGENT_BRIEF.md`.
 - Acceptance: no user-specific path in any of them; `verify.sh` passes in this checkout; `shoot.sh` writes its sheets under the work folder.
 - Verify: `bash scripts/jak3-skate/verify.sh`; `grep -rn "Users/Alan" scripts/jak3-skate` prints nothing.
@@ -108,7 +110,7 @@ one at a time.
 - A full build, the extracted game, the texture pack and the two environment variables in `C:\Users\Alan\Projects\jak3-loop\jak-project`. Not a Codex ticket; listed because every other ticket's verification depends on it.
 - Acceptance: `VERIFY` passes there.
 
-**[infra-03] Local engine additions as patch files** (`agent:codex`, ready)
+**[infra-03] Local engine additions as patch files** (`agent:codex`, blocked on infra-01)
 - Scope: turn the two local additions to the engine sources (rail debug exports in `skate-ffi/src/lib.rs`; spin naming, already scripted in `tools/patch_engine_spin.py`) into patches plus one script that applies them to a clean `GTA-San-AnSkateas` at `fde499b` and builds the DLL. Lives in the work folder, not the repository. Update `skate3-transplant/README.md`.
 - Acceptance: from a fresh clone the script produces a DLL exporting `sk_debug_rail`, and `skate3-bridge-spin.gc` prints a name ending in `180`.
 - Verify: the script; `check-and-run.sh goal_src/jak3/pc/debug/skate3-bridge-spin.gc`.
@@ -126,7 +128,7 @@ one at a time.
 
 ### Graphics
 
-**[gfx-01] Level shadows: test, fix, tune** (`agent:codex`, ready; pictures reviewed before merge)
+**[gfx-01] Level shadows: test, fix, tune** (`agent:codex`, blocked on infra-01; pictures reviewed before merge)
 - Scope: the first version on branch `wip/level-shadows`. Prompt already written, in the work folder: `run/codex/shadows.prompt.md`.
 - Acceptance: outdoors, shadows of buildings, rocks and walls on the side away from the sun, attached at the foot, stable as the camera turns; no speckle on lit ground; sewer and pause menu unchanged; GPU cost reported; `VERIFY` passes.
 - Verify: `VERIFY`; `bash scripts/jak3-skate/shoot.sh`, sheets attached.
@@ -195,9 +197,16 @@ one at a time.
 
 ## Order
 
-infra-01 first: every verification command depends on it. Then gfx-01 and
-skate-01, which are already specified. skate-06, skate-08 to skate-11 and
-gfx-05 only measure, and tell us which of the remaining tickets matter most.
+infra-02 comes first and is a person's job: the loop's own checkout has to
+build and run the game before any ticket can be verified in it. Then infra-01,
+because every verification command depends on it, then gfx-01. Ready without
+either, because they only read or write a document: skate-01, skate-06,
+gfx-06, skate-13. skate-08 to skate-11 and gfx-05 only measure, and tell us
+which of the remaining tickets matter most.
+
+## Issue numbers
+
+On `Chungrl/jak-project`: infra-02 #4, infra-01 #5, infra-03 #6, infra-04 #7, infra-05 #8, gfx-01 #9, gfx-02 #10, gfx-03 #11, gfx-04 #12, gfx-05 #13, gfx-06 #14, gfx-07 #15, skate-01 #16, skate-02 #17, skate-03 #18, skate-04 #19, skate-05 #20, skate-06 #21, skate-07 #22, skate-08 #23, skate-09 #24, skate-10 #25, skate-11 #26, skate-12 #27, skate-13 #28.
 
 ## Decisions
 
