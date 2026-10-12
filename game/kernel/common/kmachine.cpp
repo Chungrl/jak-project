@@ -1001,7 +1001,8 @@ void pc_set_post_param(int id, int thousandths) {
  * (AI-assisted) Tell the renderer about the sun: given the light-group of the current mood,
  * keep its strongest directional light for the image enhancement.
  */
-void pc_set_sun_light(u32 light_group) {
+void pc_set_sun_light(u32 light_group, u32 outdoors) {
+  Gfx::g_global_settings.sun_outdoors = outdoors != 0;
   // matches light in lights-h.gc
   struct GoalLight {
     float direction[4];

@@ -6,6 +6,7 @@
 #include "common/log/log.h"
 
 #include "game/graphics/gfx.h"
+#include "game/graphics/opengl_renderer/loader/Loader.h"
 
 #include "third-party/imgui/imgui.h"
 
@@ -58,6 +59,10 @@ struct SavedState {
   }
 };
 
+// half the width of the ground each shadow map covers, and half its depth, in game units
+constexpr float kShadowRadius[2] = {4096.f * 40.f, 4096.f * 260.f};
+constexpr float kShadowDepth = 4096.f * 900.f;
+
 void bind_texture(int unit, GLuint tex) {
   glActiveTexture(GL_TEXTURE0 + unit);
   glBindTexture(GL_TEXTURE_2D, tex);
@@ -67,6 +72,12 @@ void bind_texture(int unit, GLuint tex) {
 PostFx::~PostFx() {
   free_target(m_depth);
   free_target(m_world_depth);
+  for (auto& map : m_shadow) {
+    free_target(map);
+  }
+  if (m_shadow_vao) {
+    glDeleteVertexArrays(1, &m_shadow_vao);
+  }
   free_target(m_ao[0]);
   free_target(m_ao[1]);
   free_target(m_scene);
@@ -92,6 +103,31 @@ void PostFx::init() {
   glBindBuffer(GL_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
   glGenQueries(2, m_timers);
+  glGenVertexArrays(1, &m_shadow_vao);
+  for (auto& map : m_shadow) {
+    map.w = kShadowMapSize;
+    map.h = kShadowMapSize;
+    glGenFramebuffers(1, &map.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, map.fbo);
+    glGenTextures(1, &map.tex);
+    glBindTexture(GL_TEXTURE_2D, map.tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, map.w, map.h, 0, GL_DEPTH_COMPONENT,
+                 GL_UNSIGNED_INT, nullptr);
+    // read through a comparison, filtered: a soft edge for free
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, map.tex, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+      lg::error("[PostFx] the shadow map framebuffer is not complete");
+    }
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
   m_ready = true;
 }
 
@@ -150,8 +186,13 @@ void PostFx::resize(int w, int h) {
   m_h = h;
   make_target(m_depth, w, h, 0, true);
   make_target(m_world_depth, w, h, 0, true);
-  make_target(m_ao[0], w, h, GL_RG8, false);
-  make_target(m_ao[1], w, h, GL_RG8, false);
+  make_target(m_ao[0], w, h, GL_RGBA8, false);
+  make_target(m_ao[1], w, h, GL_RGBA8, false);
+  // how much of the picture the level's shadows cover is read from the smallest mip level
+  glBindTexture(GL_TEXTURE_2D, m_ao[0].tex);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  glGenerateMipmap(GL_TEXTURE_2D);
+  glBindTexture(GL_TEXTURE_2D, 0);
   make_target(m_scene, w, h, GL_RGBA8, false);
   // the bloom reads the average brightness of the picture from its smallest mip level
   glBindTexture(GL_TEXTURE_2D, m_scene.tex);
@@ -193,6 +234,122 @@ void PostFx::draw_quad(ScopedProfilerNode& prof) {
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   prof.add_draw_call();
   prof.add_tri(2);
+}
+
+/*!
+ * Draw the collision mesh of the loaded levels into the shadow maps, as the sun sees it.
+ * The collision mesh is the one description of the level that is simple to draw from
+ * another point of view; it is a little coarser than what is seen, which the lookup allows
+ * for. Returns false if there is nothing to cast shadows.
+ */
+bool PostFx::render_sun_shadows(SharedRenderState* render_state, ScopedProfilerNode& prof) {
+  const auto& settings = Gfx::g_global_settings;
+  const float* sun = settings.sun_dir;
+  // a sun at or under the horizon puts everything in shadow, which says nothing
+  if (!settings.sun_outdoors || sun[1] < 0.08f) {
+    return false;
+  }
+  auto levels = render_state->loader->get_in_use_levels();
+  if (levels.empty()) {
+    return false;
+  }
+
+  // the map looks down the sun's rays: f is the way the light travels
+  float f[3] = {-sun[0], -sun[1], -sun[2]};
+  float len = std::sqrt(f[0] * f[0] + f[1] * f[1] + f[2] * f[2]);
+  for (auto& x : f) {
+    x /= std::max(len, 1e-6f);
+  }
+  // any direction that is not along the rays will do for "right"
+  float r[3] = {f[2], 0.f, -f[0]};
+  len = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+  if (len < 1e-4f) {
+    r[0] = 1.f;
+    r[1] = 0.f;
+    r[2] = 0.f;
+    len = 1.f;
+  }
+  for (auto& x : r) {
+    x /= len;
+  }
+  const float u[3] = {f[1] * r[2] - f[2] * r[1], f[2] * r[0] - f[0] * r[2],
+                      f[0] * r[1] - f[1] * r[0]};
+  for (int i = 0; i < 3; i++) {
+    m_shadow_axes[0][i] = r[i];
+    m_shadow_axes[1][i] = u[i];
+    m_shadow_axes[2][i] = f[i];
+  }
+
+  GLint old_depth_func = GL_GEQUAL;
+  glGetIntegerv(GL_DEPTH_FUNC, &old_depth_func);
+  const GLboolean old_cull = glIsEnabled(GL_CULL_FACE);
+  GLfloat old_clear_depth = 0.f;
+  glGetFloatv(GL_DEPTH_CLEAR_VALUE, &old_clear_depth);
+
+  auto& shader = render_state->shaders[ShaderId::POSTFX_SHADOW_DEPTH];
+  shader.activate();
+  glBindVertexArray(m_shadow_vao);
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LESS);
+  glDepthMask(GL_TRUE);
+  glDisable(GL_CULL_FACE);
+  glDisable(GL_BLEND);
+  glDisable(GL_STENCIL_TEST);
+  glDisable(GL_SCISSOR_TEST);
+  glClearDepth(1.0);
+  // keeps a surface from shadowing itself where it lies along the rays
+  glEnable(GL_POLYGON_OFFSET_FILL);
+  glPolygonOffset(2.f, 4.f);
+
+  const auto& cam = render_state->camera_pos;
+  for (int cascade = 0; cascade < kShadowCascades; cascade++) {
+    const float radius = kShadowRadius[cascade];
+    // The middle follows the camera in whole texels, so that the map's pattern stays put
+    // on the ground while the camera moves.
+    const float texel = 2.f * radius / kShadowMapSize;
+    const float cr = std::floor((cam[0] * r[0] + cam[1] * r[1] + cam[2] * r[2]) / texel) * texel;
+    const float cu = std::floor((cam[0] * u[0] + cam[1] * u[1] + cam[2] * u[2]) / texel) * texel;
+    const float cf = cam[0] * f[0] + cam[1] * f[1] + cam[2] * f[2];
+    float center[3];
+    for (int i = 0; i < 3; i++) {
+      center[i] = r[i] * cr + u[i] * cu + f[i] * cf;
+      m_shadow_delta[cascade][i] = center[i] - cam[i];
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, m_shadow[cascade].fbo);
+    glViewport(0, 0, kShadowMapSize, kShadowMapSize);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glUniform3f(glGetUniformLocation(shader.id(), "center"), center[0], center[1], center[2]);
+    glUniform3f(glGetUniformLocation(shader.id(), "axis_r"), r[0] / radius, r[1] / radius,
+                r[2] / radius);
+    glUniform3f(glGetUniformLocation(shader.id(), "axis_u"), u[0] / radius, u[1] / radius,
+                u[2] / radius);
+    glUniform3f(glGetUniformLocation(shader.id(), "axis_f"), f[0] / kShadowDepth,
+                f[1] / kShadowDepth, f[2] / kShadowDepth);
+    for (auto lev : levels) {
+      const auto count = lev->level->collision.vertices.size();
+      if (count == 0) {
+        continue;
+      }
+      glBindBuffer(GL_ARRAY_BUFFER, lev->collide_vertices);
+      glEnableVertexAttribArray(0);
+      glEnableVertexAttribArray(3);
+      glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(tfrag3::CollisionMesh::Vertex),
+                            nullptr);
+      glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, sizeof(tfrag3::CollisionMesh::Vertex),
+                             (void*)offsetof(tfrag3::CollisionMesh::Vertex, pat));
+      glDrawArrays(GL_TRIANGLES, 0, (GLsizei)count);
+      prof.add_draw_call();
+      prof.add_tri((int)(count / 3));
+    }
+  }
+
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glDisable(GL_POLYGON_OFFSET_FILL);
+  glDepthFunc(old_depth_func);
+  glClearDepth(old_clear_depth);
+  SavedState::set(GL_CULL_FACE, old_cull);
+  return true;
 }
 
 void PostFx::capture_world_depth(SharedRenderState* render_state) {
@@ -259,15 +416,34 @@ void PostFx::apply_lighting(SharedRenderState* render_state, ScopedProfilerNode&
   const float* sun_color = settings.sun_color;
   const bool have_sun = sun_color[0] + sun_color[1] + sun_color[2] > 0.01f;
 
+  // The same rotation takes a camera-relative world vector to that view space; its
+  // transpose takes one back. Row i of `view_from_world` is view axis i in the world.
+  float view_from_world[3][3];
+  for (int j = 0; j < 3; j++) {
+    view_from_world[0][j] = side * cam[j][0] / x_scale;
+    view_from_world[1][j] = side * cam[j][1] / y_scale;
+    view_from_world[2][j] = side * cam[j][3] / pzw;
+  }
+  // column-major for GL: column j of the world-from-view matrix is view axis j in the world
+  float world_from_view[9];
+  for (int j = 0; j < 3; j++) {
+    for (int i = 0; i < 3; i++) {
+      world_from_view[j * 3 + i] = view_from_world[j][i];
+    }
+  }
+
   // whether the depth of the world without the characters was captured this frame
   const bool have_world_depth = m_world_depth_frame == render_state->frame_idx;
-  const float fade_start = 4096.f * 70.f;
-  const float fade_end = 4096.f * 170.f;
+  const float fade_start = 4096.f * 120.f;
+  const float fade_end = 4096.f * 250.f;
   const int w = render_state->render_fb_w;
   const int h = render_state->render_fb_h;
   SavedState saved;
   resize(w, h);
   begin_timer(0);
+
+  const bool world_shadows =
+      have_sun && param(Gfx::POST_WORLD_SHADOW) > 0.f && render_sun_shadows(render_state, prof);
 
   // the depth buffer and the picture so far, as textures
   glDisable(GL_SCISSOR_TEST);
@@ -291,8 +467,19 @@ void PostFx::apply_lighting(SharedRenderState* render_state, ScopedProfilerNode&
     auto& shader = render_state->shaders[ShaderId::POSTFX_AO];
     shader.activate();
     glBindFramebuffer(GL_FRAMEBUFFER, m_ao[0].fbo);
+    bind_texture(3, m_shadow[1].tex);
+    bind_texture(2, m_shadow[0].tex);
     bind_texture(1, m_world_depth.tex);
     bind_texture(0, m_depth.tex);
+    glUniformMatrix3fv(glGetUniformLocation(shader.id(), "world_from_view"), 1, GL_FALSE,
+                       world_from_view);
+    glUniform3fv(glGetUniformLocation(shader.id(), "shadow_r"), 1, m_shadow_axes[0]);
+    glUniform3fv(glGetUniformLocation(shader.id(), "shadow_u"), 1, m_shadow_axes[1]);
+    glUniform3fv(glGetUniformLocation(shader.id(), "shadow_f"), 1, m_shadow_axes[2]);
+    glUniform3fv(glGetUniformLocation(shader.id(), "shadow_delta"), kShadowCascades,
+                 m_shadow_delta[0]);
+    glUniform4f(glGetUniformLocation(shader.id(), "shadow_scale"), 1.f / kShadowRadius[0],
+                1.f / kShadowRadius[1], 1.f / kShadowDepth, world_shadows ? 1.f : 0.f);
     glUniform1i(glGetUniformLocation(shader.id(), "tex_T0"), 0);
     glUniform4f(glGetUniformLocation(shader.id(), "proj"), kx, ky, depth_a, depth_b);
     glUniform4f(
@@ -302,6 +489,10 @@ void PostFx::apply_lighting(SharedRenderState* render_state, ScopedProfilerNode&
     glUniform3f(glGetUniformLocation(shader.id(), "sun_dir"), sun[0], sun[1], sun[2]);
     glUniform2f(glGetUniformLocation(shader.id(), "texel"), 1.f / w, 1.f / h);
     draw_quad(prof);
+    bind_texture(3, 0);
+    bind_texture(2, 0);
+    bind_texture(0, m_ao[0].tex);
+    glGenerateMipmap(GL_TEXTURE_2D);
   }
 
   // smooth them without crossing edges: across...
@@ -322,11 +513,17 @@ void PostFx::apply_lighting(SharedRenderState* render_state, ScopedProfilerNode&
     auto& shader = render_state->shaders[ShaderId::POSTFX_LIGHT];
     shader.activate();
     glBindFramebuffer(GL_FRAMEBUFFER, render_state->render_fb);
+    bind_texture(4, m_ao[0].tex);
     bind_texture(3, have_world_depth ? m_world_depth.tex : m_depth.tex);
     bind_texture(2, m_scene.tex);
     bind_texture(1, m_depth.tex);
     bind_texture(0, m_ao[1].tex);
     glUniform1i(glGetUniformLocation(shader.id(), "tex_T0"), 0);
+    // the sun near the horizon lights little, and so shadows little
+    glUniform1f(glGetUniformLocation(shader.id(), "world_shadow"),
+                world_shadows ? enhance * param(Gfx::POST_WORLD_SHADOW) *
+                                    std::clamp((settings.sun_dir[1] - 0.08f) / 0.25f, 0.f, 1.f)
+                              : 0.f);
     glUniform1f(glGetUniformLocation(shader.id(), "rim"),
                 have_world_depth ? enhance * param(Gfx::POST_RIM_LIGHT) : 0.f);
     glUniform4f(glGetUniformLocation(shader.id(), "proj"), kx, ky, depth_a, depth_b);
@@ -343,6 +540,7 @@ void PostFx::apply_lighting(SharedRenderState* render_state, ScopedProfilerNode&
     // the destination alpha means something to the renderers that follow
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
     draw_quad(prof);
+    bind_texture(4, 0);
     bind_texture(3, 0);
     bind_texture(2, 0);
   }
@@ -437,7 +635,8 @@ void PostFx::draw_debug_window() {
   ImGui::SliderFloat("Ambient occlusion", &settings.post_params[Gfx::POST_AO_STRENGTH], 0, 2);
   ImGui::SliderFloat("Ambient occlusion radius (m)", &settings.post_params[Gfx::POST_AO_RADIUS],
                      0.2f, 4);
-  ImGui::SliderFloat("Sun shadow", &settings.post_params[Gfx::POST_SUN_SHADOW], 0, 1);
+  ImGui::SliderFloat("Character shadows", &settings.post_params[Gfx::POST_SUN_SHADOW], 0, 1);
+  ImGui::SliderFloat("Level shadows", &settings.post_params[Gfx::POST_WORLD_SHADOW], 0, 1);
   ImGui::SliderFloat("Surface relief", &settings.post_params[Gfx::POST_RELIEF], 0, 3);
   ImGui::SliderFloat("Surface shine", &settings.post_params[Gfx::POST_SPECULAR], 0, 3);
   ImGui::SliderFloat("Bloom", &settings.post_params[Gfx::POST_BLOOM], 0, 2);

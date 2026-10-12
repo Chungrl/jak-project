@@ -12,6 +12,8 @@ uniform sampler2D tex_T0; // ambient occlusion and sun shadow, blurred horizonta
 uniform sampler2D tex_T1; // depth
 uniform sampler2D tex_T2; // the picture so far
 uniform sampler2D tex_T3; // depth before the characters were drawn
+uniform sampler2D tex_T4; // the shading before its blur; its smallest mip is the average
+uniform float world_shadow; // strength of the level's own shadows
 uniform float rim;        // light on the edges of characters
 uniform vec4 proj;
 uniform vec2 texel;
@@ -58,17 +60,17 @@ void main() {
   // second half of the blur
   const float WEIGHTS[5] = float[5](0.227, 0.194, 0.122, 0.054, 0.016);
   float tolerance = 0.04 * depth;
-  vec2 sum = texture(tex_T0, tex_coord).rg * WEIGHTS[0];
+  vec3 sum = texture(tex_T0, tex_coord).rgb * WEIGHTS[0];
   float total = WEIGHTS[0];
   for (int i = 1; i < 5; i++) {
     for (int side = -1; side <= 1; side += 2) {
       vec2 uv = tex_coord + vec2(0.0, texel.y * float(i * side));
       float w = WEIGHTS[i] * max(0.0, 1.0 - abs(view_depth(uv) - depth) / tolerance);
-      sum += texture(tex_T0, uv).rg * w;
+      sum += texture(tex_T0, uv).rgb * w;
       total += w;
     }
   }
-  vec2 shade = sum / total;
+  vec3 shade = sum / total;
   // A character is whatever was drawn in front of the world after it. Its small shapes
   // would be darkened all over by shading sized for the world, so it gets less of it.
   float world_depth = to_view_depth(textureLod(tex_T3, tex_coord, 0.0).r);
@@ -80,6 +82,12 @@ void main() {
   ao = mix(ao, 1.0, max(0.55 * character, smoothstep(0.6, 1.0, brightness) * 0.7));
   float sun_strength = clamp(luma(sun_color) * 1.4, 0.0, 1.0);
   float shadow = (1.0 - shade.g) * min(amounts.y, 1.0) * sun_strength * (1.0 - 0.6 * character);
+  // The level's shadows only say something where part of the view is lit. Under a roof or
+  // deep in a shadow everything is shadowed alike, and they are let go.
+  float lit_share = textureLod(tex_T4, vec2(0.5), 20.0).b;
+  float level_shadow = (1.0 - shade.b) * min(world_shadow, 1.0) * sun_strength *
+                       smoothstep(0.12, 0.4, lit_share) * (1.0 - 0.5 * character);
+  shadow = max(shadow, level_shadow);
   // shadows are a little cooler than what the sun lights
   vec3 shading = ao * mix(vec3(1.0), vec3(0.56, 0.6, 0.7), shadow);
 

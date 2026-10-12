@@ -74,6 +74,7 @@ enum PostParam {
   POST_SUN_SHADOW = 10,
   POST_RELIEF = 11,
   POST_SPECULAR = 12,
+  POST_WORLD_SHADOW = 13,  // shadows of the level itself
   POST_PARAM_COUNT
 };
 }  // namespace Gfx
@@ -124,7 +125,9 @@ struct GfxGlobalSettings {
   // pc-set-post-enhance. The parts are tuned with pc-set-post-param.
   float post_enhance = 1.f;
   float post_params[Gfx::POST_PARAM_COUNT] = {1.35f, 2.f, 1.3f, 0.55f, 1.f, 1.f, 1.f,
-                                              1.f, 1.f,  0.f,  1.f,   1.f, 1.f};
+                                              1.f, 1.f,  0.f,  1.f,   1.f, 1.f, 1.f};
+  // whether the game is drawing a sky, which is how it tells outdoors from indoors
+  bool sun_outdoors = false;
   // the strongest directional light of the game's current mood: the direction towards it in
   // the world, and its colour times its level. Set every frame with pc-set-sun-light.
   float sun_dir[3] = {0.f, 1.f, 0.f};

@@ -3,6 +3,7 @@
 /*!
  * @file PostFx.h
  * (AI-assisted) Optional image enhancement for Jak 3, on top of the original look:
+ *  - shadows of the level, from a shadow map of its collision mesh drawn from the sun.
  *  - ambient occlusion and short sun shadows, worked out from the depth buffer, and relief
  *    and shine of surfaces under the sun, worked out from the picture. These are put on the
  *    picture after the world and the characters are drawn, before water, particles and the
@@ -58,6 +59,16 @@ class PostFx {
   void make_target(Target& target, int w, int h, GLint internal_format, bool depth);
   void free_target(Target& target);
   void draw_quad(ScopedProfilerNode& prof);
+  bool render_sun_shadows(SharedRenderState* render_state, ScopedProfilerNode& prof);
+
+  // The level as the sun sees it, around the camera: a small sharp map and a large coarse
+  // one. `shadow_delta` is each map's middle relative to the camera.
+  static constexpr int kShadowCascades = 2;
+  static constexpr int kShadowMapSize = 4096;
+  Target m_shadow[kShadowCascades];
+  GLuint m_shadow_vao = 0;
+  float m_shadow_axes[3][3] = {};
+  float m_shadow_delta[kShadowCascades][3] = {};
   void begin_timer(int which);
   void end_timer();
 

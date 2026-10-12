@@ -3,15 +3,24 @@
 // (AI-assisted) Shading worked out from the depth buffer. See PostFx.cpp.
 //  red:   ambient occlusion, how much of the space around each point is filled by nearby
 //         surfaces (1 = open)
-//  green: sun shadow, whether a character close by stands between the point and the sun
-//         (1 = lit). The world's own shadows are already painted into it; what it lacks
-//         is the shadows of the things that move.
+//  green: whether a character close by stands between the point and the sun (1 = lit),
+//         found by walking the depth buffer
+//  blue:  whether the level stands between the point and the sun (1 = lit), from the
+//         shadow maps
 
 out vec4 color;
 in vec2 tex_coord;
 
 uniform sampler2D tex_T0; // depth
 uniform sampler2D tex_T1; // depth before the characters were drawn
+uniform sampler2DShadow tex_T2; // the level as the sun sees it, near the camera
+uniform sampler2DShadow tex_T3; // the same, far around it
+uniform mat3 world_from_view;
+uniform vec3 shadow_r;      // the shadow maps' right, up and depth directions in the world
+uniform vec3 shadow_u;
+uniform vec3 shadow_f;
+uniform vec3 shadow_delta[2]; // the middle of each map, relative to the camera
+uniform vec4 shadow_scale;  // 1 / half width of each map, 1 / half depth, above 0.5: on
 uniform vec4 proj;        // view x per ndc x and depth, the same for y, depth scale, depth offset
 uniform vec4 params;      // radius, distance where the effects start to fade, where they end,
                           // reach of the sun shadow (0: none)
@@ -37,6 +46,34 @@ float view_depth(vec2 uv) {
 
 vec3 view_position(vec2 uv, float depth) {
   return vec3((uv * 2.0 - 1.0) * proj.xy * depth, depth);
+}
+
+// How much of the sun reaches a point of the level: 1 lit, 0 shadowed.
+float level_lit(vec3 p, vec3 n, float noise) {
+  for (int cascade = 0; cascade < 2; cascade++) {
+    float scale = cascade == 0 ? shadow_scale.x : shadow_scale.y;
+    // The collision mesh the map was drawn from is coarser than what is seen. Looking a
+    // little off the surface keeps it from shadowing itself.
+    float texel_size = 2.0 / (scale * 4096.0);
+    vec3 w = world_from_view * (p + n * max(3.0 * texel_size, 700.0)) - shadow_delta[cascade];
+    vec3 l = vec3(dot(w, shadow_r) * scale, dot(w, shadow_u) * scale, dot(w, shadow_f) * shadow_scale.z);
+    if (abs(l.x) > 0.97 || abs(l.y) > 0.97) {
+      continue;
+    }
+    vec3 at = l * 0.5 + 0.5;
+    at.z -= 0.00002;
+    // a ring of filtered lookups, turned differently at each pixel
+    float spread = (cascade == 0 ? 2.2 : 1.4) / 4096.0;
+    float sum = 0.0;
+    for (int i = 0; i < 8; i++) {
+      float a = TAU * (float(i) + noise) / 8.0;
+      float radius = spread * sqrt((float(i) + 0.5) / 8.0);
+      vec3 where = vec3(at.xy + vec2(cos(a), sin(a)) * radius, at.z);
+      sum += cascade == 0 ? texture(tex_T2, where) : texture(tex_T3, where);
+    }
+    return sum / 8.0;
+  }
+  return 1.0;
 }
 
 void main() {
@@ -125,5 +162,14 @@ void main() {
     lit = mix(1.0, lit, smoothstep(0.02, 0.2, facing));
   }
 
-  color = vec4(mix(1.0, ao, fade), mix(1.0, lit, fade), 0.0, 1.0);
+  // the level's own shadow
+  float level = 1.0;
+  if (shadow_scale.w > 0.5) {
+    level = level_lit(p, n, noise);
+    // A surface turned away from the sun is in its own shadow. The lighting painted into
+    // the level already darkens it, so only part of the shadow is added there.
+    level = min(level, mix(0.45, 1.0, smoothstep(-0.05, 0.2, facing)));
+  }
+
+  color = vec4(mix(1.0, ao, fade), mix(1.0, lit, fade), mix(1.0, level, fade), 1.0);
 }

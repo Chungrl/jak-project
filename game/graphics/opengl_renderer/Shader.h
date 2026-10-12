@@ -75,6 +75,7 @@ enum class ShaderId {
   POSTFX_BLOOM_DOWN = 48,
   POSTFX_BLOOM_UP = 49,
   POSTFX_LIGHT = 50,
+  POSTFX_SHADOW_DEPTH = 51,
   MAX_SHADERS
 };
 

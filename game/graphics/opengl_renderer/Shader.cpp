@@ -142,6 +142,7 @@ ShaderLibrary::ShaderLibrary(GameVersion version) {
   at(ShaderId::POSTFX_BLOOM_DOWN) = {"postfx_bloom_down", version};
   at(ShaderId::POSTFX_BLOOM_UP) = {"postfx_bloom_up", version};
   at(ShaderId::POSTFX_LIGHT) = {"postfx_light", version};
+  at(ShaderId::POSTFX_SHADOW_DEPTH) = {"postfx_shadow_depth", version};
 
   for (auto& shader : m_shaders) {
     ASSERT_MSG(shader.okay(), "error compiling shader");
