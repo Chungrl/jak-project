@@ -48,6 +48,12 @@ ten seconds while the engine loads.
 Trick names and Skate 3's score are shown as plain text; set
 `*jak3-skate3-bridge-hud*` to `#f` in a REPL to hide them.
 
+`*jak3-skate3-bridge-world-scale*` (default 1.3) sets how big the skating is
+next to Jak: the board, the speeds and the heights scale together. At 1.0 they
+are those of a real skater Jak's height, which looked small and slow beside
+him. A new value takes effect the next time the board is mounted, with a
+several-second pause while the engine restarts.
+
 ## What works
 
 Checked on Jak 3 NTSC (SCUS-97330) through the manual checks listed below,

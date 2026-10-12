@@ -58,8 +58,9 @@
    (sequence        float)        ;; out: points of the running sequence
    (multiplier      float)        ;; out
    (total           float)        ;; out: points landed this session
+   (world-scale     float)        ;; in: size of the skating relative to Jak's own size
    )
-  :size-assert #xb0
+  :size-assert #xb4
   )
 
 ;; Mirrors jak3::skate3_bridge::RigBone: one of Jak's joints, for the rig setup.
@@ -83,6 +84,12 @@
 
 (define *jak3-skate3-bridge-enabled* #f)
 (define *jak3-skate3-bridge-active* #f)
+;; How big the skating is next to Jak. At 1.0 the board and the speeds are those
+;; of a real skater Jak's height, which looks small and slow beside his build
+;; and in his world; larger values scale the board, the speeds and the heights
+;; up together. Changing it takes effect the next time the board is mounted or
+;; the bridge is switched on, and restarts the engine (several seconds).
+(define *jak3-skate3-bridge-world-scale* 1.3)
 ;; The jetboard damages anything it touches, which turns bystanders hostile.
 ;; While the bridge drives the board that is switched off unless this is #f.
 (define *jak3-skate3-bridge-harmless* #t)
@@ -336,6 +343,7 @@
     (vector-z-quaternion! (-> io forward) (-> self control quat))
     ;; Jak is drawn larger than his model; the scale is in his bone matrices.
     (set! (-> io unit-scale) (vector-length (-> self node-list data SKATE3_RIG_FIRST_BONE bone transform rvec)))
+    (set! (-> io world-scale) *jak3-skate3-bridge-world-scale*)
     (set! (-> io trick-name) *skate3-trick-name*)
     (skate3-bridge-clear-input! io)
     (set! *skate3-rig-count* 0)

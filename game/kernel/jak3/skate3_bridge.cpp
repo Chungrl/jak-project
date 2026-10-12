@@ -185,6 +185,9 @@ struct Engine {
   bool winding_logged = false;
   // Size of the host character relative to its model; fixed when the session starts.
   float unit_scale = 1.f;
+  // Game units per engine metre, including the world scale; fixed when the session starts.
+  float units_per_meter = 4096.f;
+  float world_scale = 1.f;
   u32 rig_count = 0;
   // The skateboard's transform is recovered from three vertices of its deck: nose, tail and
   // one on the deck's edge. `board_fix` turns the frame they span into the board's frame.
@@ -558,6 +561,18 @@ void do_activate(BridgeIO* io) {
     ground_count = (u32)(g_engine.world.size() / 9);
   }
 
+  // A different world scale needs a new session: the engine's unit is fixed when it starts.
+  const float world_scale =
+      (io->world_scale > 0.5f && io->world_scale < 3.f) ? io->world_scale : 1.f;
+  if (g_engine.session && std::abs(world_scale - g_engine.world_scale) > 0.001f) {
+    lg::info("[skate3] world scale changed from {:.2f} to {:.2f}: restarting the engine",
+             g_engine.world_scale, world_scale);
+    g_engine.session_free(g_engine.session);
+    g_engine.session = nullptr;
+    g_engine.rig_count = 0;
+    g_engine.board_ready = false;
+  }
+
   if (!g_engine.session) {
     const auto assets = env("OPENGOAL_SKATE3_ASSETS");
     if (assets.empty()) {
@@ -567,12 +582,14 @@ void do_activate(BridgeIO* io) {
     }
     g_engine.unit_scale =
         (io->unit_scale > 0.5f && io->unit_scale < 3.f) ? io->unit_scale : 1.f;
-    lg::info("[skate3] starting the engine at character scale {:.3f} (this blocks for several "
-             "seconds)",
-             g_engine.unit_scale);
+    g_engine.world_scale = world_scale;
+    g_engine.units_per_meter = kUnitsPerMeter * g_engine.unit_scale * g_engine.world_scale;
+    lg::info("[skate3] starting the engine at character scale {:.3f}, world scale {:.2f} (this "
+             "blocks for several seconds)",
+             g_engine.unit_scale, g_engine.world_scale);
     g_engine.session =
         g_engine.session_new(assets.c_str(), ground, ground_count, nullptr, nullptr, 0,
-                             1.f / (kUnitsPerMeter * g_engine.unit_scale));
+                             1.f / g_engine.units_per_meter);
     if (!g_engine.session) {
       lg::error("[skate3] the engine did not start: {}", engine_error());
       io->status = kEngineError;
@@ -783,7 +800,7 @@ void setup_board() {
   std::nth_element(top_heights.begin(), top_heights.begin() + top_heights.size() / 2,
                    top_heights.end());
   const float top = top_heights[top_heights.size() / 2];
-  const float tolerance = 0.01f * kUnitsPerMeter * g_engine.unit_scale;
+  const float tolerance = 0.01f * g_engine.units_per_meter;
   float axis[3];
   vec_sub(pos(b), pos(a), axis);
   vec_normalize(axis);
@@ -846,7 +863,7 @@ void setup_board() {
   float length[3];
   vec_sub(pos(b), pos(a), length);
   lg::info("[skate3] skateboard: {} vertices in {} parts, {:.2f} m long", total, surfaces,
-           std::sqrt(vec_dot(length, length)) / (kUnitsPerMeter * g_engine.unit_scale));
+           std::sqrt(vec_dot(length, length)) / g_engine.units_per_meter);
 }
 
 /*!

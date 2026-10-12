@@ -55,8 +55,10 @@ enum Status : s32 {
  * flat ground at the activation height instead.
  *
  * unit_scale: the host character is drawn larger than its model (Jak's skeleton is scaled by
- * about 1.39, and his world is built to match). The engine is told that one of its metres is
- * 4096 * unit_scale game units, so the skater, board and speeds are in proportion to him.
+ * 1.4, and his world is built to match).
+ * world_scale: a further factor on the size of everything the engine simulates: the board,
+ * the speeds and the heights. The engine is told that one of its metres is
+ * 4096 * unit_scale * world_scale game units. Changing it restarts the engine session.
  */
 struct BridgeIO {
   float position[4];  // in: activation position. out: skater root
@@ -94,8 +96,9 @@ struct BridgeIO {
   float sequence;      // out: points of the running sequence, multiplier included
   float multiplier;    // out
   float total;         // out: points of every sequence landed this session
+  float world_scale;   // in: how much larger than the character's own size the skating is
 };
-static_assert(sizeof(BridgeIO) == 176, "skate3-bridge-io layout");
+static_assert(sizeof(BridgeIO) == 180, "skate3-bridge-io layout");
 
 /*!
  * Mirrors the GOAL type skate3-rig-bone: one host bone for kRigSetup, parents before children.
