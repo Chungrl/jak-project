@@ -76,7 +76,9 @@ watching the game's log and screenshots:
   cutscene or script grabs Jak the bridge lets go and picks up again afterwards.
 - **Left and right are not mirrored.** Holding the left stick right turns Jak
   towards his own right-hand side, and his left foot leads on the board, the
-  regular stance. A third of the stick turned him less than the full stick.
+  regular stance. A third of the stick turned him less than the full stick,
+  and a Flickit ollie with the stick only three quarters of the way out still
+  popped.
 
 ## Known limits
 
