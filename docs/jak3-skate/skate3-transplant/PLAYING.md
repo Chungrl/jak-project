@@ -72,7 +72,11 @@ watching the game's log and screenshots:
 - **Water.** Riding off a pier in Haven City's port, the bridge handed over to
   the jetboard at the water's surface and Jak rode on across it.
 - **Hand-overs.** Switching to the jetboard and back, getting off and on again,
-  and dying and respawning, all leave the game in a normal state.
+  and dying and respawning, all leave the game in a normal state. When a
+  cutscene or script grabs Jak the bridge lets go and picks up again afterwards.
+- **Left and right are not mirrored.** Holding the left stick right turns Jak
+  towards his own right-hand side, and his left foot leads on the board, the
+  regular stance. A third of the stick turned him less than the full stick.
 
 ## Known limits
 
@@ -84,9 +88,15 @@ watching the game's log and screenshots:
   skateboard, and it cannot ride on them. If Jak drops 30 m below where the
   board last touched down the bridge switches off and the jetboard takes over.
 - **Jak can still touch things.** Triggers, pickups and characters react to him
-  as usual; skating into citizens can make Spargus's guards open fire.
-- **Grinding by hand is untested.** The grinds above started from a restart
-  placed over the rail, not from an ollie onto it.
+  as usual.
+- **Grinding from an ollie is hard to hit.** The grinds above started from a
+  restart placed over the rail. Rolling at a rail and doing an ollie by script
+  reached a grind once in 112 approaches (named an over-willy grind by the
+  engine); whether a person finds it easier is untested.
+- **Spargus's guards.** In the long checks Jak was repeatedly shot dead by the
+  guards. The jetboard only attacks what it touches during its own spin and
+  zap moves, which the bridge does not use, so this is most likely the game's
+  usual reaction to citizens being run into, but that was not established.
 - **No skateboard sounds.** The jetboard's sounds are silenced while skating and
   nothing replaces them.
 - **The camera is Jak's own**, not Skate 3's, and the right stick no longer
@@ -112,9 +122,11 @@ resets the game when it disconnects):
 (ml "goal_src/jak3/pc/debug/skate3-bridge-grind.gc")  ; grinds on the engine's rails
 (ml "goal_src/jak3/pc/debug/skate3-bridge-explore.gc"); Spargus slope, then Haven's port and its water
 (ml "goal_src/jak3/pc/debug/skate3-bridge-observe.gc"); watches while you play
+(ml "goal_src/jak3/pc/debug/skate3-bridge-steer.gc")  ; mirror check, partial stick, cutscene grab
+(ml "goal_src/jak3/pc/debug/skate3-bridge-ollie-grind.gc") ; roll at rails and ollie onto them
 ```
 
-`skate3-bridge-grind.gc` needs an engine library that also exports
+`skate3-bridge-grind.gc` and `skate3-bridge-ollie-grind.gc` need an engine library that also exports
 `sk_debug_rail_count` and `sk_debug_rail` (a small local addition to
 `skate-ffi`); with a stock library it reports that and stops.
 

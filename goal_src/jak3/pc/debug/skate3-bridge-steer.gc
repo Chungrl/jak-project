@@ -9,6 +9,8 @@
 ;;    compared with that side.
 ;;  - Which foot leads on the board is reported (left foot forward is the
 ;;    regular stance Skate 3 starts in).
+;;  - The stick is then held a third and two thirds of the way, to see that
+;;    partial deflection steers less.
 ;;  - Jak is grabbed and released, as a cutscene does.
 
 (define *sk3s-phase* 0)
@@ -81,16 +83,35 @@
                      "Jak's LEFT, MIRRORED")))
        (skate3-bridge-clear-input! io)
        (sk3s-next 60))
+      ;; partial deflection: a third of the way, then two thirds, for the same time
       ((= phase 5)
+       (vector-copy! *sk3s-heading* (-> io forward))
+       (set! (-> io left-x) 0.33)
+       (sk3s-next 45))
+      ((= phase 6)
+       (format 0 "SK3TEST a third of the stick turned ~f (sine of the angle)~%"
+               (fabs (sk3s-side *sk3s-heading* (-> io forward))))
+       (skate3-bridge-clear-input! io)
+       (sk3s-next 60))
+      ((= phase 7)
+       (vector-copy! *sk3s-heading* (-> io forward))
+       (set! (-> io left-x) 0.66)
+       (sk3s-next 45))
+      ((= phase 8)
+       (format 0 "SK3TEST two thirds of the stick turned ~f~%"
+               (fabs (sk3s-side *sk3s-heading* (-> io forward))))
+       (skate3-bridge-clear-input! io)
+       (sk3s-next 60))
+      ((= phase 9)
        ;; a cutscene grabs Jak
        (sk3s-log "before-grab")
        (process-grab? *target* #f)
        (sk3s-next 90))
-      ((= phase 6)
+      ((= phase 10)
        (sk3s-log "grabbed")
        (process-release? *target*)
        (sk3s-next 120))
-      ((= phase 7)
+      ((= phase 11)
        (sk3s-log "released")
        (set! *jak3-skate3-bridge-scripted-input* #f)
        (format 0 "SK3TEST done~%")
