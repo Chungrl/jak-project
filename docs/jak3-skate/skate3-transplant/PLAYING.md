@@ -59,8 +59,9 @@ watching the game's log and screenshots:
   to the jetboard and back, and dismounted (Triangle), twice over.
 - **Riding** on the game's own collision, following slopes and stopping at
   walls, in Spargus, Haven City's port and industrial section, the desert, the
-  forest, the sewer and the stadium (`skate3-bridge-levels.gc`: 11 to 55 m
-  ridden in four seconds of pushing at each).
+  forest, the sewer, the stadium and the mine (`skate3-bridge-levels.gc`: 3 to
+  55 m ridden in four seconds of pushing at each, the short ones ending at a
+  wall or in a bail).
 - **Not floating.** With Jak on the skateboard his lower foot joint measured
   0.09 to 0.28 m above the ground under him across those levels; the jetboard
   carries him about a metre up.
@@ -96,8 +97,10 @@ watching the game's log and screenshots:
   moving platform, and doors, have not been tried. Vehicles and characters are
   not obstacles to the skateboard. If Jak drops 30 m below where the board last
   touched down he is put back there and given the jetboard.
-- **The mine's start point did not work.** Jak arrives there under attack, and
-  the bridge switched itself off; why was not established.
+- **Jumping between levels by script is rough.** When the level check reached
+  the mine straight from a bail in the forest, Jak did not get on the board or
+  the bridge switched off; loaded on its own the mine rode normally, twice.
+  When the bridge switches itself off it now prints the reason to the console.
 - **The engine's own walking mode is not used.** If the engine takes the skater
   off the board by itself, Jak gets off the board.
 - **Jak can still touch things.** Triggers, pickups and characters react to him
@@ -116,7 +119,9 @@ watching the game's log and screenshots:
   turns it while skating.
 - **Jak's head and fingers do not move**; they ride on his chest and hands.
 - **Missions and real cutscenes have not been tried.** Only a scripted grab
-  and release, as cutscenes do to Jak, was.
+  and release, as cutscenes do to Jak, was. Pausing and unpausing mid-ride with
+  the Start key left Jak where he was, at the same speed, with the bridge
+  still driving.
 - **Frame rates other than 60** have only been exercised through the clock path
   at 60; the engine is stepped from game time at its own fixed rate.
 

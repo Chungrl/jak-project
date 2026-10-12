@@ -1,0 +1,52 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Manual check: kills Jak on foot and changes level while he is
+;; dead, then again once he is back, to see whether the game survives it. The
+;; bridge is not used. Not part of any DGO.
+
+(define *sk3d-phase* 0)
+(define *sk3d-timer* 0)
+
+(defun sk3d-next ((frames int))
+  (+! *sk3d-phase* 1)
+  (set! *sk3d-timer* frames)
+  (none))
+
+(defun sk3d-tick ()
+  (cond
+    ((not *target*) #f)
+    ((> *sk3d-timer* 0) (+! *sk3d-timer* -1))
+    ((= *sk3d-phase* 0)
+     (when (!= (-> *target* next-state name) 'target-continue)
+       (format 0 "SK3TEST killing Jak, bridge configured ~A~%" *jak3-skate3-bridge-configured*)
+       (send-event *target* 'attack-invinc #f
+                   (static-attack-info :mask (vehicle-impulse-factor) ((id (the-as uint 2))
+                                                                       (damage 1000.0)
+                                                                       (vehicle-damage-factor 1.0)
+                                                                       (vehicle-impulse-factor 1.0)
+                                                                       (mode 'instant-death))))
+       (sk3d-next 45)))
+    ((= *sk3d-phase* 1)
+     (format 0 "SK3TEST Jak ~A dead ~A; changing level now~%" (-> *target* state name) (focus-test? *target* dead))
+     (start 'play (get-continue-by-name *game-info* "sewer-start"))
+     (sk3d-next 900))
+    ((= *sk3d-phase* 2)
+     (format 0 "SK3TEST survived the level change: Jak ~A at ~m ~m ~m~%" (-> *target* state name)
+             (-> *target* control trans x) (-> *target* control trans y) (-> *target* control trans z))
+     (start 'play (get-continue-by-name *game-info* "minea-start"))
+     (sk3d-next 900))
+    ((= *sk3d-phase* 3)
+     (format 0 "SK3TEST second level change: Jak ~A~%" (-> *target* state name))
+     (format 0 "SK3TEST done~%")
+     (sk3d-next 0))))
+
+(set! *sk3d-phase* 0)
+(set! *sk3d-timer* 0)
+(format 0 "SK3TEST begin~%")
+(process-spawn-function process :name "sk3-death"
+  (lambda :behavior process ()
+    (loop
+      (sk3d-tick)
+      (suspend)))
+  :to *display-pool*)

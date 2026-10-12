@@ -354,8 +354,9 @@
       (sound-stop (-> self board eco-sound-id))
       (sound-stop (-> self board charge-sound-id)))
     ;; A failed start turns the bridge off so it is not retried every frame.
-    (if (not *jak3-skate3-bridge-active*)
-        (set! *jak3-skate3-bridge-enabled* #f)))
+    (when (not *jak3-skate3-bridge-active*)
+      (format 0 "[skate3] bridge off: the engine did not start (status ~D)~%" (-> io status))
+      (set! *jak3-skate3-bridge-enabled* #f)))
   *jak3-skate3-bridge-active*)
 
 (defbehavior target-skate3-bridge-step target ()
@@ -367,6 +368,7 @@
         (skate3-bridge-read-pad! io (-> self control cpad)))
     (cond
       ((!= (pc-skate3-bridge io) 0)
+       (format 0 "[skate3] bridge off: the engine step failed (status ~D)~%" (-> io status))
        (target-skate3-bridge-release)
        (set! *jak3-skate3-bridge-enabled* #f)
        #f)
@@ -381,6 +383,8 @@
        ;; Fallen out of the world the engine knows (it was standing on something
        ;; the engine could not see, or went off the level). Put Jak back where
        ;; the board last stood and give him the jetboard.
+       (format 0 "[skate3] bridge off: the skater fell from ~m to ~m, out of the world the engine knows~%"
+               *skate3-bridge-ground-y* (-> io position y))
        (move-to-point! (-> self control) *skate3-bridge-safe-pos*)
        (vector-reset! (-> self control transv))
        (target-skate3-bridge-release)
