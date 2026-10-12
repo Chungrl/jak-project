@@ -282,6 +282,19 @@
 (define-extern pc-set-game-resolution (function int int none))
 (define-extern pc-set-brightness-contrast (function int int none))
 (define-extern pc-set-msaa (function int none))
+;; (AI-assisted) optional image enhancement (ambient occlusion, bloom, sharpening, grading),
+;; in percent: 0 off (the original picture), 100 as designed
+(define-extern pc-set-post-enhance (function int none))
+;; tune one part of it, in thousandths. ids: 0 ambient occlusion, 1 its radius in metres,
+;; 2 bloom, 3 bloom threshold, 4 sharpening, 5 contrast, 6 saturation, 7 vignette,
+;; 8 character rim light, 9 show the added shading alone, 10 sun shadow, 11 surface relief,
+;; 12 surface shine
+(define-extern pc-set-post-param (function int int none))
+;; the light-group of the current mood: its strongest light is the sun of the enhancement
+(declare-type light-group structure)
+(define-extern pc-set-sun-light (function light-group none))
+;; like pc-screen-shot, but saves what the window shows, final pass included
+(define-extern pc-screen-shot-window (function none))
 (define-extern pc-set-gfx-hack (function pc-gfx-hack symbol none))
 (define-extern pc-get-unix-timestamp (function int))
 (define-extern pc-filter-debug-string? (function string float symbol))

@@ -292,6 +292,9 @@
 
   (set! *hires-sky* (-> obj hires-clouds?))
 
+  ;; (AI-assisted) the sun, for the optional image enhancement (see PostFx.h in the renderer)
+  (pc-set-sun-light (-> *time-of-day-context* light-group 0))
+
   (when (not (led-enabled? obj))
     (disable *led-fader-state*)
     )

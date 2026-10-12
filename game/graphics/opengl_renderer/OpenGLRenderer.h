@@ -8,6 +8,7 @@
 #include "game/graphics/opengl_renderer/BucketRenderer.h"
 #include "game/graphics/opengl_renderer/CollideMeshRenderer.h"
 #include "game/graphics/opengl_renderer/SkateBoardRenderer.h"
+#include "game/graphics/opengl_renderer/PostFx.h"
 #include "game/graphics/opengl_renderer/Fbo.h"
 #include "game/graphics/opengl_renderer/Profiler.h"
 #include "game/graphics/opengl_renderer/Shader.h"
@@ -130,6 +131,7 @@ class OpenGLRenderer {
   FullScreenDraw m_blackout_renderer;
   CollideMeshRenderer m_collide_renderer;
   SkateBoardRenderer m_skate_board_renderer;
+  PostFx m_post_fx;
 
   float m_last_pmode_alp = 1.;
   bool m_enable_fast_blackout_loads = true;

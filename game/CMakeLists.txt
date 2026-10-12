@@ -50,6 +50,7 @@ set(RUNTIME_SOURCE
         graphics/opengl_renderer/BucketRenderer.cpp
         graphics/opengl_renderer/CollideMeshRenderer.cpp
         graphics/opengl_renderer/SkateBoardRenderer.cpp
+        graphics/opengl_renderer/PostFx.cpp
         graphics/opengl_renderer/debug_gui.cpp
         graphics/opengl_renderer/DepthCue.cpp
         graphics/opengl_renderer/DirectRenderer.cpp

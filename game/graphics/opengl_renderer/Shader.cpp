@@ -137,6 +137,11 @@ ShaderLibrary::ShaderLibrary(GameVersion version) {
   at(ShaderId::OCEAN_ENVMAP) = {"ocean_envmap", version};
   at(ShaderId::OCEAN_ENVMAP_HAZE) = {"ocean_envmap_haze", version};
   at(ShaderId::SKATE_BOARD) = {"skate_board", version};
+  at(ShaderId::POSTFX_AO) = {"postfx_ao", version};
+  at(ShaderId::POSTFX_AO_BLUR) = {"postfx_ao_blur", version};
+  at(ShaderId::POSTFX_BLOOM_DOWN) = {"postfx_bloom_down", version};
+  at(ShaderId::POSTFX_BLOOM_UP) = {"postfx_bloom_up", version};
+  at(ShaderId::POSTFX_LIGHT) = {"postfx_light", version};
 
   for (auto& shader : m_shaders) {
     ASSERT_MSG(shader.okay(), "error compiling shader");

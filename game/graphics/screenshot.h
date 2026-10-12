@@ -22,6 +22,8 @@ struct ScreenShotSettings {
 
 extern ScreenShotSettings* g_screen_shot_settings;
 extern bool g_want_screenshot;
+// (AI-assisted) save what the window shows, final pass included (pc-screen-shot-window)
+extern bool g_want_window_screenshot;
 
 void register_screen_shot_settings(ScreenShotSettings* settings);
 const char* get_screen_shot_name();

@@ -980,6 +980,63 @@ void pc_set_msaa(int samples) {
   Gfx::g_global_settings.msaa_samples = samples;
 }
 
+/*!
+ * (AI-assisted) Strength of the optional image enhancement in percent: 0 turns it off,
+ * 100 is as designed, up to 200.
+ */
+void pc_set_post_enhance(int percent) {
+  Gfx::g_global_settings.post_enhance = std::clamp(percent, 0, 200) / 100.f;
+}
+
+/*!
+ * (AI-assisted) Tune one part of the image enhancement (Gfx::PostParam), in thousandths.
+ */
+void pc_set_post_param(int id, int thousandths) {
+  if (id >= 0 && id < Gfx::POST_PARAM_COUNT) {
+    Gfx::g_global_settings.post_params[id] = std::clamp(thousandths, 0, 8000) / 1000.f;
+  }
+}
+
+/*!
+ * (AI-assisted) Tell the renderer about the sun: given the light-group of the current mood,
+ * keep its strongest directional light for the image enhancement.
+ */
+void pc_set_sun_light(u32 light_group) {
+  // matches light in lights-h.gc
+  struct GoalLight {
+    float direction[4];
+    float color[4];
+    float extra[4];  // x: level
+  };
+  auto& settings = Gfx::g_global_settings;
+  const GoalLight* lights = light_group ? Ptr<GoalLight>(light_group).c() : nullptr;
+  const GoalLight* best = nullptr;
+  float best_power = 0.f;
+  for (int i = 0; lights && i < 3; i++) {
+    const auto& l = lights[i];
+    const float power =
+        l.extra[0] * (0.299f * l.color[0] + 0.587f * l.color[1] + 0.114f * l.color[2]);
+    const float len2 = l.direction[0] * l.direction[0] + l.direction[1] * l.direction[1] +
+                       l.direction[2] * l.direction[2];
+    if (power > best_power && len2 > 0.25f && len2 < 4.f) {
+      best = &l;
+      best_power = power;
+    }
+  }
+  for (int i = 0; i < 3; i++) {
+    settings.sun_dir[i] = best ? best->direction[i] : (i == 1 ? 1.f : 0.f);
+    settings.sun_color[i] = best ? std::clamp(best->color[i] * best->extra[0], 0.f, 1.5f) : 0.f;
+  }
+}
+
+/*!
+ * (AI-assisted) Save what the window shows at the end of this frame, final pass included,
+ * under the registered screen shot name. pc-screen-shot saves the picture before that pass.
+ */
+void pc_screen_shot_window() {
+  g_want_window_screenshot = true;
+}
+
 void pc_set_frame_rate(int rate) {
   Gfx::g_global_settings.target_fps = rate;
 }
@@ -1192,6 +1249,10 @@ void init_common_pc_port_functions(
   // graphics things
   make_func_symbol_func("pc-set-vsync", (void*)pc_set_vsync);
   make_func_symbol_func("pc-set-msaa", (void*)pc_set_msaa);
+  make_func_symbol_func("pc-set-post-enhance", (void*)pc_set_post_enhance);
+  make_func_symbol_func("pc-set-post-param", (void*)pc_set_post_param);
+  make_func_symbol_func("pc-set-sun-light", (void*)pc_set_sun_light);
+  make_func_symbol_func("pc-screen-shot-window", (void*)pc_screen_shot_window);
   make_func_symbol_func("pc-set-frame-rate", (void*)pc_set_frame_rate);
   make_func_symbol_func("pc-set-game-resolution", (void*)pc_set_game_resolution);
   make_func_symbol_func("pc-set-brightness-contrast", (void*)pc_set_brightness_contrast);

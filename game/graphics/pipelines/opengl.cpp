@@ -512,6 +512,13 @@ void render_game_frame(int game_width,
       options.quick_screenshot = true;
       options.screenshot_path = file_util::make_screenshot_filepath(g_game_version);
     }
+    // (AI-assisted) the window as shown, saved under the registered name
+    if (g_want_window_screenshot) {
+      g_want_window_screenshot = false;
+      options.save_screenshot = true;
+      options.screenshot_path =
+          file_util::make_screenshot_filepath(g_game_version, get_screen_shot_name());
+    }
     // note : it's important we call get_screenshot_flag first because it modifies state
     if (g_gfx_data->debug_gui.get_screenshot_flag() || g_want_screenshot) {
       g_want_screenshot = false;

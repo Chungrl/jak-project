@@ -1144,6 +1144,11 @@ void OpenGLRenderer::draw_renderer_selection_window() {
   ImGui::Checkbox("Occlusion Cull", &m_render_state.use_occlusion_culling);
   ImGui::Checkbox("Blackout Loads", &m_enable_fast_blackout_loads);
 
+  if (ImGui::TreeNode("Image Enhancement")) {
+    m_post_fx.draw_debug_window();
+    ImGui::TreePop();
+  }
+
   if (m_texture_animator && ImGui::TreeNode("Texture Animator")) {
     m_texture_animator->draw_debug_window();
     ImGui::TreePop();
@@ -1437,9 +1442,23 @@ void OpenGLRenderer::dispatch_buckets_jak3(DmaFollower dma,
       m_skate_board_renderer.render(&m_render_state, p);
     }
 
+    // (AI-assisted) optional image enhancement, see PostFx.h. The added shading goes on the
+    // world and the characters, before particles are drawn over them. The water buckets
+    // come first because parts of the ground are drawn in them.
+    if (bucket_id + 1 == (int)jak3::BucketId::TEX_L0_PRIS) {
+      m_post_fx.capture_world_depth(&m_render_state);
+    }
+    if (bucket_id + 1 == (int)jak3::BucketId::TEX_SPRITE) {
+      auto p = prof.make_scoped_child("lighting");
+      m_post_fx.apply_lighting(&m_render_state, p);
+    }
+
     if (bucket_id == (int)jak3::BucketId::TEX_HUD_HUD_ALPHA) {
       auto p = prof.make_scoped_child("color-filter");
       m_blit_displays->apply_color_filter(&m_render_state, p);
+      // the glow is gathered here so that the HUD does not glow
+      auto bloom_prof = prof.make_scoped_child("bloom");
+      m_post_fx.prepare_bloom(&m_render_state, bloom_prof);
     }
   }
   vif_interrupt_callback(m_bucket_renderers.size());
@@ -1660,6 +1679,23 @@ void OpenGLRenderer::do_pcrtc_effects(float alp,
   auto& shader = render_state->shaders[ShaderId::POST_PROCESSING];
   shader.activate();
   glUniform1i(glGetUniformLocation(shader.id(), "tex_T0"), 0);
+  {
+    // (AI-assisted) optional image enhancement, see PostFx.h
+    const auto& params = Gfx::g_global_settings.post_params;
+    const float enhance =
+        m_version == GameVersion::Jak3 ? Gfx::g_global_settings.post_enhance : 0.f;
+    const GLuint bloom = m_post_fx.bloom_texture(render_state);
+    glUniform1f(glGetUniformLocation(shader.id(), "enhance"), enhance);
+    glUniform4f(glGetUniformLocation(shader.id(), "fx"), enhance * params[Gfx::POST_SHARPEN],
+                bloom ? enhance * params[Gfx::POST_BLOOM] : 0.f,
+                enhance * params[Gfx::POST_CONTRAST], enhance * params[Gfx::POST_SATURATION]);
+    glUniform4f(glGetUniformLocation(shader.id(), "fx2"), enhance * params[Gfx::POST_VIGNETTE],
+                1.f / render_state->draw_region_w, 1.f / render_state->draw_region_h, 0.f);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, bloom);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, *window_blit_src->tex_id);
+  }
   if (brightness_contrast_color < 0) {
     // subtractive blend - note that color is already negative
     float color_neg = color * alpha;

@@ -1,0 +1,98 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Manual check of the optional image enhancement (see
+;; game/graphics/opengl_renderer/PostFx.h). For each of a list of start points
+;; it loads the level and saves pictures of what the window shows:
+;;   sk3-gfx-<n>-<level>-a   the original picture (enhancement off)
+;;   sk3-gfx-<n>-<level>-b   the enhancement as designed
+;;   sk3-gfx-<n>-<level>-c   the added shading alone
+;;   sk3-gfx-<n>-<level>-d   the distance the renderer reads back, in coloured bands
+;;   sk3-gfx-<n>-<level>-e   the pause menu over the enhanced picture (last level only)
+;; It leaves the enhancement on, as it is by default. Not part of any DGO.
+
+(define *gfxc-phase* 0)
+(define *gfxc-timer* 0)
+(define *gfxc-count* 0)
+(define *gfxc-level* 0)
+(define *gfxc-names* (new 'static 'boxed-array :type string
+                       "desert-start" "ctyinda-start" "foresta-start" "sewer-start" "ctyport-start"))
+
+(defun gfxc-shot ((mode string))
+  (clear *temp-string*)
+  (format *temp-string* "sk3-gfx-~D-~S-~S" *gfxc-level* (-> *gfxc-names* *gfxc-level*) mode)
+  (copyn-charp<-string (-> *screen-shot-settings* name) *temp-string* 244)
+  (pc-screen-shot-window)
+  (none))
+
+(defun gfxc-next ((frames int))
+  (+! *gfxc-phase* 1)
+  (set! *gfxc-timer* frames)
+  (none))
+
+(defun gfxc-tick ()
+  (let ((phase *gfxc-phase*))
+    (cond
+      ((not *target*) #f)
+      ((> *gfxc-timer* 0) (+! *gfxc-timer* -1))
+      ((= phase 0)
+       (when (and (!= (-> *target* next-state name) 'target-continue) (not (focus-test? *target* dead)))
+         (cond
+           ((>= *gfxc-level* (-> *gfxc-names* length))
+            (pc-set-post-param 9 0)
+            (pc-set-post-enhance 100)
+            (format 0 "SK3TEST done~%")
+            (set! *gfxc-phase* 99))
+           (else
+            (let ((cont (get-continue-by-name *game-info* (-> *gfxc-names* *gfxc-level*))))
+              (cond
+                (cont
+                 (start 'play cont)
+                 (set! *gfxc-count* 0)
+                 (gfxc-next 0))
+                (else
+                 (format 0 "SK3TEST level ~S: no such start point~%" (-> *gfxc-names* *gfxc-level*))
+                 (+! *gfxc-level* 1))))))))
+      ((= phase 1)
+       ;; wait for the level and for Jak to be standing in it
+       (+! *gfxc-count* 1)
+       (when (or (and (!= (-> *target* next-state name) 'target-continue) (> *gfxc-count* 600)
+                      (not (focus-test? *target* dead)))
+                 (> *gfxc-count* 3000))
+         (format 0 "SK3TEST level ~S~%" (-> *gfxc-names* *gfxc-level*))
+         (pc-set-post-param 9 0)
+         (pc-set-post-enhance 0)
+         (gfxc-next 20)))
+      ((= phase 2) (gfxc-shot "a") (gfxc-next 10))
+      ((= phase 3) (pc-set-post-enhance 100) (gfxc-next 20))
+      ((= phase 4) (gfxc-shot "b") (gfxc-next 10))
+      ((= phase 5) (pc-set-post-param 9 1000) (gfxc-next 20))
+      ((= phase 6) (gfxc-shot "c") (gfxc-next 10))
+      ((= phase 7) (pc-set-post-param 9 2000) (gfxc-next 20))
+      ((= phase 8) (gfxc-shot "d") (gfxc-next 10))
+      ((= phase 9)
+       (pc-set-post-param 9 0)
+       (cond
+         ((= (+ *gfxc-level* 1) (-> *gfxc-names* length))
+          ;; on the last level, the pause menu as well
+          (set-master-mode 'progress)
+          (gfxc-next 150))
+         (else
+          (+! *gfxc-level* 1)
+          (set! *gfxc-phase* 0))))
+      ((= phase 10) (gfxc-shot "e") (gfxc-next 10))
+      ((= phase 11)
+       (set-master-mode 'game)
+       (+! *gfxc-level* 1)
+       (set! *gfxc-phase* 0)))))
+
+(set! *gfxc-phase* 0)
+(set! *gfxc-timer* 0)
+(set! *gfxc-level* 0)
+(format 0 "SK3TEST begin~%")
+(process-spawn-function process :name "gfx-compare"
+  (lambda :behavior process ()
+    (loop
+      (gfxc-tick)
+      (suspend)))
+  :to *display-pool*)

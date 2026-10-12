@@ -57,6 +57,27 @@ struct GfxRendererModule {
 static constexpr int PAT_MOD_COUNT = 4;
 static constexpr int PAT_EVT_COUNT = 20;
 static constexpr int PAT_MAT_COUNT = 34;
+namespace Gfx {
+// (AI-assisted) the parts of the optional image enhancement, see opengl_renderer/PostFx.h.
+// Indices into GfxGlobalSettings::post_params, and the ids taken by pc-set-post-param.
+enum PostParam {
+  POST_AO_STRENGTH = 0,
+  POST_AO_RADIUS = 1,  // metres
+  POST_BLOOM = 2,
+  POST_BLOOM_THRESHOLD = 3,
+  POST_SHARPEN = 4,
+  POST_CONTRAST = 5,
+  POST_SATURATION = 6,
+  POST_VIGNETTE = 7,
+  POST_RIM_LIGHT = 8,
+  POST_DEBUG_VIEW = 9,  // above 0.5: show the added shading alone
+  POST_SUN_SHADOW = 10,
+  POST_RELIEF = 11,
+  POST_SPECULAR = 12,
+  POST_PARAM_COUNT
+};
+}  // namespace Gfx
+
 struct GfxGlobalSettings {
   bool debug = true;  // graphics debugging
 
@@ -97,6 +118,17 @@ struct GfxGlobalSettings {
 
   // fancy effect things
   bool hack_no_tex = false;
+
+  // (AI-assisted) optional image enhancement for Jak 3, see opengl_renderer/PostFx.h.
+  // post_enhance scales all of it: 0 = off (the original picture), 1 = as designed. Set with
+  // pc-set-post-enhance. The parts are tuned with pc-set-post-param.
+  float post_enhance = 1.f;
+  float post_params[Gfx::POST_PARAM_COUNT] = {1.35f, 2.f, 1.3f, 0.55f, 1.f, 1.f, 1.f,
+                                              1.f, 1.f,  0.f,  1.f,   1.f, 1.f};
+  // the strongest directional light of the game's current mood: the direction towards it in
+  // the world, and its colour times its level. Set every frame with pc-set-sun-light.
+  float sun_dir[3] = {0.f, 1.f, 0.f};
+  float sun_color[3] = {0.f, 0.f, 0.f};
 
   // collision renderer settings
   bool collision_enable = false;

@@ -9,6 +9,7 @@
 ScreenShotSettings s_default_screen_shot_settings = {1920, 1080, 8, "screenshot"};
 
 bool g_want_screenshot = false;
+bool g_want_window_screenshot = false;
 ScreenShotSettings* g_screen_shot_settings = &s_default_screen_shot_settings;
 
 void register_screen_shot_settings(ScreenShotSettings* settings) {

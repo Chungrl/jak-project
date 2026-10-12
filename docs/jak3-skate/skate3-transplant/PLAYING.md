@@ -24,6 +24,9 @@ not have it yet.
 The build and conversion steps used on the development machine are recorded in
 [README.md](README.md).
 
+This branch also has an optional image enhancement (shading, shadows, bloom),
+on by default: see [../graphics-enhancement.md](../graphics-enhancement.md).
+
 ## Controls
 
 | Pad | Does |
