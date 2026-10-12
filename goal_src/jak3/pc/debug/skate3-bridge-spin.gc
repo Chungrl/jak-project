@@ -1,0 +1,97 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Manual scripted check of the Skate 3 bridge: spins and the
+;; names the engine gives them. With scripted input it pushes, then three
+;; times crouches and pops while the left stick is held to one side: an ollie
+;; turning right, an ollie turning left, and a kickflip turning right. It
+;; prints every trick name as the engine announces or renames it. A spin that
+;; gets round should show as a name ending in 180 (or 360), or as a half cab
+;; when riding fakie. Not part of any DGO.
+
+(define *sk3s-base-tick* -1)
+(define *sk3s-names* 0)
+(define *sk3s-phase* 0)
+(define *sk3s-wait* 0)
+
+(defun sk3s-script-input ((step int))
+  "Scripted pad for the engine step about to run."
+  (let ((io *skate3-bridge-io*))
+    (skate3-bridge-clear-input! io)
+    (cond
+      ;; push
+      ((and (>= step 60) (< step 330)) (set! (-> io buttons) (the-as uint #x1000)))
+      ;; ollie, turning right
+      ((and (>= step 400) (< step 420)) (set! (-> io right-y) -1.0) (set! (-> io left-x) 1.0))
+      ((and (>= step 420) (< step 426)) (set! (-> io right-y) 1.0) (set! (-> io left-x) 1.0))
+      ((and (>= step 426) (< step 500)) (set! (-> io left-x) 1.0))
+      ;; push again
+      ((and (>= step 540) (< step 700)) (set! (-> io buttons) (the-as uint #x1000)))
+      ;; ollie, turning left
+      ((and (>= step 760) (< step 780)) (set! (-> io right-y) -1.0) (set! (-> io left-x) -1.0))
+      ((and (>= step 780) (< step 786)) (set! (-> io right-y) 1.0) (set! (-> io left-x) -1.0))
+      ((and (>= step 786) (< step 860)) (set! (-> io left-x) -1.0))
+      ;; push again
+      ((and (>= step 900) (< step 1060)) (set! (-> io buttons) (the-as uint #x1000)))
+      ;; kickflip (down, then up and to the left), turning right
+      ((and (>= step 1120) (< step 1140)) (set! (-> io right-y) -1.0) (set! (-> io left-x) 1.0))
+      ((and (>= step 1140) (< step 1146))
+       (set! (-> io right-y) 0.75) (set! (-> io right-x) -0.66) (set! (-> io left-x) 1.0))
+      ((and (>= step 1146) (< step 1220)) (set! (-> io left-x) 1.0))))
+  (none))
+
+(defun sk3s-tick ()
+  (let ((io *skate3-bridge-io*)
+        (phase *sk3s-phase*))
+    (cond
+      ((not *target*) #f)
+      ((> *sk3s-wait* 0) (+! *sk3s-wait* -1))
+      ((= phase 0)
+       (when (!= (-> *target* next-state name) 'target-continue)
+         (set! *sk3s-phase* 1)
+         (set! *sk3s-wait* 120)))
+      ((= phase 1)
+       (set! *jak3-skate3-bridge-scripted-input* #t)
+       (skate3-bridge-clear-input! io)
+       (set! *jak3-skate3-bridge-enabled* #t)
+       (logior! (-> *game-info* features) (game-feature board))
+       (logior! (-> *game-info* debug-features) (game-feature board))
+       (send-event *target* 'change-mode 'board #f)
+       (set! *sk3s-phase* 2)
+       (set! *sk3s-wait* 0))
+      ((= phase 2)
+       (+! *sk3s-wait* -1)
+       (cond
+         (*jak3-skate3-bridge-active*
+          (set! *sk3s-base-tick* (the-as int (-> io tick)))
+          (set! *sk3s-names* (the-as int (-> io tricks)))
+          (format 0 "SK3TEST active after ~D frames~%" (- *sk3s-wait*))
+          (set! *sk3s-wait* 0)
+          (set! *sk3s-phase* 3))
+         ((< *sk3s-wait* -900)
+          (format 0 "SK3TEST FAILED bridge did not activate, status ~D~%" (-> io status))
+          (set! *sk3s-phase* 99))))
+      ((= phase 3)
+       (let ((step (- (the-as int (-> io tick)) *sk3s-base-tick*)))
+         (sk3s-script-input step)
+         (when (!= *sk3s-names* (the-as int (-> io tricks)))
+           (set! *sk3s-names* (the-as int (-> io tricks)))
+           (format 0 "SK3TEST step ~D name ~S state ~D speed ~m~%"
+                   step *skate3-trick-name* (-> io state) (vector-length (-> io velocity))))
+         (when (or (>= step 1300) (not *jak3-skate3-bridge-active*))
+           (format 0 "SK3TEST end step ~D state ~D bails ~D pops ~D landings ~D~%"
+                   step (-> io state) (-> io bails) (-> io pops) (-> io landings))
+           (set! *jak3-skate3-bridge-enabled* #f)
+           (set! *jak3-skate3-bridge-scripted-input* #f)
+           (format 0 "SK3TEST done~%")
+           (set! *sk3s-phase* 99)))))))
+
+(set! *sk3s-phase* 0)
+(set! *sk3s-wait* 0)
+(format 0 "SK3TEST begin~%")
+(process-spawn-function process :name "sk3-spin"
+  (lambda :behavior process ()
+    (loop
+      (sk3s-tick)
+      (suspend)))
+  :to *display-pool*)

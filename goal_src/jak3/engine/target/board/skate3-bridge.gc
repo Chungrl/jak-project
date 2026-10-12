@@ -53,7 +53,7 @@
    (dt              float)        ;; in: seconds of game time for a step; 0 runs exactly one
    (steps           uint32)       ;; out: fixed engine steps the last step command ran
    (trick-name      string)       ;; in: string of at least 64 characters for the last trick
-   (tricks          uint32)       ;; out: tricks announced so far; a change means a new name
+   (tricks          uint32)       ;; out: tricks announced or renamed so far; a change means a new name
    (sequence-active int32)        ;; out: nonzero while a run of tricks is being scored
    (sequence        float)        ;; out: points of the running sequence
    (multiplier      float)        ;; out
@@ -90,6 +90,10 @@
 ;; up together. Changing it takes effect the next time the board is mounted or
 ;; the bridge is switched on, and restarts the engine (several seconds).
 (define *jak3-skate3-bridge-world-scale* 1.6)
+;; How fast the skating runs next to the game's own clock. 1.0 is Skate 3's
+;; own pace; a little more makes the pushes, the roll and the tricks quicker
+;; without making the board any bigger. Takes effect at once.
+(define *jak3-skate3-bridge-time-scale* 1.15)
 ;; The jetboard damages anything it touches, which turns bystanders hostile.
 ;; While the bridge drives the board that is switched off unless this is #f.
 (define *jak3-skate3-bridge-harmless* #t)
@@ -371,7 +375,9 @@
   "Advance the engine and put Jak where its board is. #f if the engine failed."
   (let ((io *skate3-bridge-io*))
     (set! (-> io command) 0)
-    (set! (-> io dt) (if *jak3-skate3-bridge-scripted-input* 0.0 (seconds-per-frame)))
+    (set! (-> io dt) (if *jak3-skate3-bridge-scripted-input*
+                         0.0
+                         (* *jak3-skate3-bridge-time-scale* (seconds-per-frame))))
     (if (not *jak3-skate3-bridge-scripted-input*)
         (skate3-bridge-read-pad! io (-> self control cpad)))
     (cond
@@ -427,6 +433,9 @@
            (pc-skate3-bridge io)))
        #t))))
 
+;; Whether the engine has been asked to start ahead of the first ride.
+(define *skate3-bridge-prepared?* #f)
+
 (defbehavior target-skate3-bridge-on-foot target ()
   "Called from Jak's normal post. If gk was started with the bridge configured,
    the jetboard is a skateboard from the start, and Jak has it."
@@ -437,7 +446,20 @@
         (set! *jak3-skate3-bridge-enabled* #t)))
   (when *jak3-skate3-bridge-configured*
     (logior! (-> *game-info* features) (game-feature board))
-    (logior! (-> *game-info* debug-features) (game-feature board)))
+    (logior! (-> *game-info* debug-features) (game-feature board))
+    ;; The engine takes several seconds to start. Start it now, on its own
+    ;; thread, so that getting on the board for the first time does not wait
+    ;; for it. Jak's size is in his bone matrices once he has been drawn.
+    (when (and *jak3-skate3-bridge-enabled* (not *skate3-bridge-prepared?*))
+      (let ((io *skate3-bridge-io*)
+            (scale (vector-length (-> self node-list data SKATE3_RIG_FIRST_BONE bone transform rvec))))
+        (when (and (> scale 1.0) (< scale 2.0))
+          (set! *skate3-bridge-prepared?* #t)
+          (set! (-> io command) 12)
+          (vector-copy! (-> io position) (-> self control trans))
+          (set! (-> io unit-scale) scale)
+          (set! (-> io world-scale) *jak3-skate3-bridge-world-scale*)
+          (pc-skate3-bridge io)))))
   (none))
 
 (defbehavior target-skate3-bridge-post target ()

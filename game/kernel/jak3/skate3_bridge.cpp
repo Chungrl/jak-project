@@ -8,14 +8,18 @@
 #include "skate3_bridge.h"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 
 #include "common/log/log.h"
+#include "common/util/Timer.h"
 
 #include "game/graphics/opengl_renderer/SkateBoardRenderer.h"
 #include "game/kernel/common/Ptr.h"
@@ -232,6 +236,21 @@ struct Engine {
 
 Engine g_engine;
 
+/*!
+ * An engine session started ahead of time on its own thread (kPrepare). The thread is
+ * detached: gk may exit while it is still loading. `state` is the only thing shared with
+ * it while it runs; the other fields are read by the game thread once it says done.
+ */
+struct PreparedSession {
+  enum State : int { kNone, kLoading, kDone };
+  std::atomic<int> state{kNone};
+  SkSession* session = nullptr;
+  float unit_scale = 1.f;
+  float world_scale = 1.f;
+  float seconds = 0.f;
+};
+PreparedSession g_prepared;
+
 std::string env(const char* name) {
   const char* value = std::getenv(name);
   return value ? std::string(value) : std::string();
@@ -373,22 +392,72 @@ void build_flat_ground(const float* game_center, float* triangles) {
 }
 
 /*!
- * Turn the engine's text key for a trick into something to show: ID_TRICK_FLIP_KICKFLIP
- * becomes KICKFLIP. Writes at most `capacity` bytes including the terminator.
+ * Turn what the engine calls a trick into something to show. The name is one or more words
+ * separated by spaces: text keys of Skate 3, and plain numbers for the degrees of a spin.
+ *   ID_TRICK_FLIP_KICKFLIP                          KICKFLIP
+ *   ID_TRICK_FLIP_KICKFLIP 360                      KICKFLIP 360
+ *   ID_TRICK_AIR_FS_SPIN 180                        FS 180
+ *   ID_TRICK_FLIP_HEELFLIP ID_TRICK_AUTHENTIC_BS_HALFCAB   HEELFLIP BS HALFCAB
+ * Writes at most `capacity` bytes including the terminator.
  */
 void readable_trick_name(const char* key, char* out, size_t capacity) {
-  const char* name = key;
-  const char* prefix = "ID_TRICK_";
-  if (strncmp(name, prefix, strlen(prefix)) == 0) {
-    name += strlen(prefix);
-    // the first word is the kind of trick; keep it only when it is the whole name
-    if (const char* rest = strchr(name, '_')) {
-      name = rest + 1;
-    }
-  }
+  static const char* const prefix = "ID_TRICK_";
+  // keys whose words do not read well with the rule below
+  static const char* const special[][2] = {
+      {"ID_TRICK_AIR_FS_SPIN", "FS"},
+      {"ID_TRICK_AIR_BS_SPIN", "BS"},
+      {"ID_TRICK_AIR_METRICS_FRONTFLIP", "FRONTFLIP"},
+      {"ID_TRICK_AIR_METRICS_BACKFLIP", "BACKFLIP"},
+  };
   size_t length = 0;
-  for (; name[length] && length + 1 < capacity; length++) {
-    out[length] = name[length] == '_' ? ' ' : name[length];
+  const auto put = [&](char c) {
+    if (length + 1 < capacity) {
+      out[length++] = c;
+    }
+  };
+  const char* at = key;
+  while (*at) {
+    const char* end = strchr(at, ' ');
+    const size_t word_length = end ? (size_t)(end - at) : strlen(at);
+    if (word_length > 0) {
+      if (length > 0) {
+        put(' ');
+      }
+      const char* name = at;
+      size_t name_length = word_length;
+      for (const auto& entry : special) {
+        if (strlen(entry[0]) == word_length && strncmp(at, entry[0], word_length) == 0) {
+          name = entry[1];
+          name_length = strlen(entry[1]);
+        }
+      }
+      if (name == at && word_length > strlen(prefix) &&
+          strncmp(at, prefix, strlen(prefix)) == 0) {
+        name += strlen(prefix);
+        name_length -= strlen(prefix);
+        // the first word is the kind of trick; keep it only when it is the whole name
+        const char* rest = (const char*)memchr(name, '_', name_length);
+        if (rest) {
+          name_length -= (size_t)(rest + 1 - name);
+          name = rest + 1;
+        }
+        // some keys say it twice
+        if (name_length > 6 && strncmp(name, "TRICK_", 6) == 0) {
+          name += 6;
+          name_length -= 6;
+        }
+      }
+      for (size_t i = 0; i < name_length; i++) {
+        // 5_0 and 50_50 are the grinds 5-0 and 50-50
+        const bool between_digits = i > 0 && i + 1 < name_length && name[i - 1] >= '0' &&
+                                    name[i - 1] <= '9' && name[i + 1] >= '0' && name[i + 1] <= '9';
+        put(name[i] != '_' ? name[i] : between_digits ? '-' : ' ');
+      }
+    }
+    at += word_length;
+    while (*at == ' ') {
+      at++;
+    }
   }
   out[length] = 0;
 }
@@ -532,10 +601,13 @@ void write_outputs(BridgeIO* io) {
   memset(&score, 0, sizeof(score));
   if (g_engine.score(g_engine.session, &score) == 0) {
     score.trick[sizeof(score.trick) - 1] = 0;
-    if (io->trick_name && score.tricks != io->tricks) {
+    // A trick that turns into another while it is in the air (a spin reaching its next half
+    // turn, say) is not a new announcement, but its name changes all the same.
+    const u32 names = score.tricks + score.converts;
+    if (io->trick_name && names != io->tricks) {
       readable_trick_name(score.trick, Ptr<String>(io->trick_name).c()->data(), 64);
     }
-    io->tricks = score.tricks;
+    io->tricks = names;
     io->sequence_active = score.sequence_active;
     io->sequence = score.sequence;
     io->multiplier = score.multiplier;
@@ -544,11 +616,84 @@ void write_outputs(BridgeIO* io) {
   io->status = kOk;
 }
 
+float valid_scale(float value) {
+  return (value > 0.5f && value < 3.f) ? value : 1.f;
+}
+
+void do_prepare(BridgeIO* io) {
+  if (!load_library()) {
+    io->status = kUnavailable;
+    return;
+  }
+  io->status = kOk;
+  if (g_engine.session || g_prepared.state.load() != PreparedSession::kNone) {
+    return;
+  }
+  const auto assets = env("OPENGOAL_SKATE3_ASSETS");
+  if (assets.empty()) {
+    io->status = kUnavailable;
+    return;
+  }
+  g_prepared.unit_scale = valid_scale(io->unit_scale);
+  g_prepared.world_scale = valid_scale(io->world_scale);
+  const float units_per_meter = kUnitsPerMeter * g_prepared.unit_scale * g_prepared.world_scale;
+  // The first activate installs the level around the skater; until then, flat ground.
+  std::vector<float> flat(18);
+  build_flat_ground(io->position, flat.data());
+  const auto session_new = g_engine.session_new;
+  g_prepared.state.store(PreparedSession::kLoading);
+  lg::info("[skate3] starting the engine in the background at character scale {:.3f}, world "
+           "scale {:.2f}",
+           g_prepared.unit_scale, g_prepared.world_scale);
+  std::thread([assets, flat, units_per_meter, session_new]() {
+    Timer timer;
+    g_prepared.session =
+        session_new(assets.c_str(), flat.data(), 2, nullptr, nullptr, 0, 1.f / units_per_meter);
+    g_prepared.seconds = (float)timer.getSeconds();
+    g_prepared.state.store(PreparedSession::kDone);
+  }).detach();
+}
+
+/*!
+ * Take over the session started by kPrepare, waiting for it if it is still loading. It is
+ * dropped if it was started for other scales than the ones now asked for.
+ */
+void adopt_prepared(float unit_scale, float world_scale) {
+  if (g_prepared.state.load() == PreparedSession::kNone) {
+    return;
+  }
+  Timer timer;
+  while (g_prepared.state.load() != PreparedSession::kDone) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  SkSession* session = g_prepared.session;
+  g_prepared.session = nullptr;
+  g_prepared.state.store(PreparedSession::kNone);
+  if (!session) {
+    lg::error("[skate3] the engine did not start in the background: {}", engine_error());
+    return;
+  }
+  lg::info("[skate3] the engine took {:.1f} s to start in the background; waited {:.0f} ms "
+           "for it",
+           g_prepared.seconds, timer.getMs());
+  if (g_engine.session || std::abs(unit_scale - g_prepared.unit_scale) > 0.02f ||
+      std::abs(world_scale - g_prepared.world_scale) > 0.001f) {
+    lg::info("[skate3] the scales changed since: not using it");
+    g_engine.session_free(session);
+    return;
+  }
+  g_engine.session = session;
+  g_engine.unit_scale = g_prepared.unit_scale;
+  g_engine.world_scale = g_prepared.world_scale;
+  g_engine.units_per_meter = kUnitsPerMeter * g_engine.unit_scale * g_engine.world_scale;
+}
+
 void do_activate(BridgeIO* io) {
   if (!load_library()) {
     io->status = kUnavailable;
     return;
   }
+  Timer activate_timer;
   // Ride the level collision gathered by the host; with none, lay flat ground instead.
   float flat[18];
   const float* ground = flat;
@@ -562,8 +707,10 @@ void do_activate(BridgeIO* io) {
   }
 
   // A different world scale needs a new session: the engine's unit is fixed when it starts.
-  const float world_scale =
-      (io->world_scale > 0.5f && io->world_scale < 3.f) ? io->world_scale : 1.f;
+  const float world_scale = valid_scale(io->world_scale);
+  if (!g_engine.session) {
+    adopt_prepared(valid_scale(io->unit_scale), world_scale);
+  }
   if (g_engine.session && std::abs(world_scale - g_engine.world_scale) > 0.001f) {
     lg::info("[skate3] world scale changed from {:.2f} to {:.2f}: restarting the engine",
              g_engine.world_scale, world_scale);
@@ -580,8 +727,7 @@ void do_activate(BridgeIO* io) {
       io->status = kUnavailable;
       return;
     }
-    g_engine.unit_scale =
-        (io->unit_scale > 0.5f && io->unit_scale < 3.f) ? io->unit_scale : 1.f;
+    g_engine.unit_scale = valid_scale(io->unit_scale);
     g_engine.world_scale = world_scale;
     g_engine.units_per_meter = kUnitsPerMeter * g_engine.unit_scale * g_engine.world_scale;
     lg::info("[skate3] starting the engine at character scale {:.3f}, world scale {:.2f} (this "
@@ -632,6 +778,10 @@ void do_activate(BridgeIO* io) {
     g_engine.period = period;
   }
   write_outputs(io);
+  // getting on the board should not be felt as a pause: say when it was
+  if (activate_timer.getMs() > 30.0) {
+    lg::info("[skate3] getting on the board held the game for {:.0f} ms", activate_timer.getMs());
+  }
 }
 
 void vec_sub(const float* a, const float* b, float* out) {
@@ -1118,6 +1268,13 @@ void do_step(BridgeIO* io) {
 void shutdown() {
 #ifdef _WIN32
   set_board_visible(false);
+  if (g_engine.session_free && g_prepared.state.load() == PreparedSession::kDone) {
+    if (g_prepared.session) {
+      g_engine.session_free(g_prepared.session);
+    }
+    g_prepared.session = nullptr;
+    g_prepared.state.store(PreparedSession::kNone);
+  }
   if (g_engine.session && g_engine.session_free) {
     g_engine.session_free(g_engine.session);
   }
@@ -1170,6 +1327,9 @@ s64 pc_skate3_bridge(u32 io_ptr) {
       break;
     case kSetVelocity:
       do_set_velocity(io);
+      break;
+    case kPrepare:
+      do_prepare(io);
       break;
     case kRelease:
       set_board_visible(false);

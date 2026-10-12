@@ -38,6 +38,10 @@ enum Command : s32 {
   kDebugRail = 10,    // the longest segment of grind rail `world_count`: its ends are written
                       // to `position` and `velocity`, and the number of rails to `world_rails`
   kSetVelocity = 11,  // give the board and skater the velocity in `velocity` (units per second)
+  // Start the engine on a thread of its own, for the scales in `unit_scale` and `world_scale`,
+  // so that the first activate does not have to wait the several seconds that takes. Returns
+  // at once. Asking again does nothing.
+  kPrepare = 12,
 };
 
 enum Status : s32 {
@@ -91,7 +95,8 @@ struct BridgeIO {
   float dt;            // in: seconds of game time for kStep; 0 or less runs exactly one step
   u32 steps;           // out: fixed engine steps the last kStep ran (0 is normal on fast frames)
   u32 trick_name;      // in: GOAL string of at least 64 characters, filled with the last trick
-  u32 tricks;          // out: tricks announced so far; a change means trick_name is new
+  u32 tricks;          // out: tricks announced or renamed so far (a spin turning a trick into
+                       // its 180 is a rename); a change means trick_name is new
   s32 sequence_active; // out: nonzero while a run of tricks is being scored
   float sequence;      // out: points of the running sequence, multiplier included
   float multiplier;    // out

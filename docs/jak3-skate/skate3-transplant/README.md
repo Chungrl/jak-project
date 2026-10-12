@@ -202,6 +202,15 @@ Route chosen: the engine in-process, through the `skate-ffi` C interface.
 - `skate_ffi.dll` built for x86-64 MSVC from `GTA-San-AnSkateas` `fde499b` (the
   repository's engine copy lacks the `skate-data` crate; it was copied from the
   mashup repository). Its `tests-c/smoke.c` passed on the converted data (exit 0).
+- Local addition to the engine, not in this repository (2026-10-12): the
+  copy of the engine that `GTA-San-AnSkateas` carries scores a spin but never
+  puts it in the trick's name. The newer copy of the same engine in
+  `Faiqie/BullySkate` (`skate-runtime/src/scoring_runtime/display.rs`, about 80
+  lines following Skate 3's own naming: "180", "360", half cabs, FS and BS
+  spins) does. That file and the few lines that feed it were carried over into
+  the older copy before building `skate_ffi.dll`. Body-flip names were left
+  out: the older copy does not track which way the flip went. The patch script
+  used is kept beside the engine sources as `tools/patch_engine_spin.py`.
 - Data converted with the mashup's `iw4l_skate_convert.py` driving the
   SK8-ENGINE `tools` tree at `cb79689`, into `skate3-work/skate-data-mashup`.
 - Jak side: `game/kernel/jak3/skate3_bridge.{h,cpp}` (loads the DLL at run time

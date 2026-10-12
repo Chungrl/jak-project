@@ -45,8 +45,13 @@ Only the right-stick ollie and kickflip and Cross to push have been exercised,
 and those with scripted input. The other buttons are passed to the engine
 unchanged and do whatever Skate 3 does with them.
 
-The first time the skateboard is used in a session the game freezes for about
-ten seconds while the engine loads.
+The engine takes about nine seconds to load. It is started on a thread of its
+own as soon as Jak is in the level, so getting on the board does not wait for
+it unless that is done within those first seconds. Measured: getting on held
+the game for 47 ms the first time and under 30 ms after that.
+
+Push strength is Skate 3's own: it grows with how long Cross is held, so hold
+it for a strong push and tap it for a light one.
 
 Trick names and Skate 3's score are shown as plain text; set
 `*jak3-skate3-bridge-hud*` to `#f` in a REPL to hide them.
@@ -56,6 +61,11 @@ next to Jak: the board, the speeds and the heights scale together. At 1.0 they
 are those of a real skater Jak's height, which looked small and slow beside
 him. A new value takes effect the next time the board is mounted, with a
 several-second pause while the engine restarts.
+
+`*jak3-skate3-bridge-time-scale*` (default 1.15) sets how fast the skating runs
+next to the game's clock. 1.0 is Skate 3's own pace. More makes the pushes, the
+roll and the tricks quicker without changing the size of anything. It takes
+effect at once.
 
 ## What works
 
@@ -76,6 +86,11 @@ watching the game's log and screenshots:
   carries him about a metre up.
 - **Tricks** recognised, named and scored by Skate 3's own logic: ollie,
   kickflip.
+- **Spins are named.** A trick that turns in the air is renamed as it passes
+  each half turn: seen with real key input as OLLIE 180, OLLIE 360, FS 180 and
+  LATE KICKFLIP 360 (`skate3-bridge-spin.gc` for the scripted check). This
+  needs the local addition to the engine described in [README.md](README.md);
+  with a stock engine library the names stay as they were.
 - **Grinds.** Restarted above grind rails the engine had found in Spargus, the
   skater ground 9 or 10 of 30 of them in most runs (2 of 30 in one), named by
   the engine as 50-50, 5-0, feeble, nose, boardslide and blunt slide, the
