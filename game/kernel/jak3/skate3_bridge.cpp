@@ -400,12 +400,17 @@ u64 hash_triangle(const float* triangle) {
 }
 
 /*!
- * The engine takes a triangle's solid side from its winding. Whichever way the game winds
- * its collision, ground must face up, so if most of the near-level triangles gathered face
- * down, every triangle is reversed.
+ * The engine takes a triangle's solid side from its winding, and the game's collision is
+ * already wound the way it expects: ground faces up. (Measured in Spargus: every near-level
+ * triangle around Jak faced up. Deciding by majority instead is wrong wherever there is more
+ * underside than floor, such as on Haven City's piers.) This only reports the counts once.
  */
 void orient_world() {
-  auto& w = g_engine.world;
+  if (g_engine.winding_logged) {
+    return;
+  }
+  g_engine.winding_logged = true;
+  const auto& w = g_engine.world;
   size_t up = 0;
   size_t down = 0;
   for (size_t i = 0; i + 9 <= w.size(); i += 9) {
@@ -420,19 +425,7 @@ void orient_world() {
     }
     (n[2] > 0.f ? up : down)++;
   }
-  const bool flip = down > up;
-  if (flip) {
-    for (size_t i = 0; i + 9 <= w.size(); i += 9) {
-      for (int a = 0; a < 3; a++) {
-        std::swap(w[i + 3 + a], w[i + 6 + a]);
-      }
-    }
-  }
-  if (!g_engine.winding_logged) {
-    g_engine.winding_logged = true;
-    lg::info("[skate3] level collision: {} near-level triangles face up, {} down; winding {}", up,
-             down, flip ? "reversed" : "kept");
-  }
+  lg::info("[skate3] level collision: {} near-level triangles face up, {} down", up, down);
 }
 
 void do_world_begin(BridgeIO* io) {

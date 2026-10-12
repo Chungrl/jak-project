@@ -167,6 +167,15 @@ Findings worth keeping:
 - A GOAL matrix in memory is the same 16 floats as a column-major matrix, so
   matrices cross the bridge without transposing.
 - The level's collision triangles already wind the way the engine expects.
+  An early version reversed every triangle when most near-level ones faced
+  down; on Haven City's piers, which have more underside than floor, that
+  turned the ground inside out and the skater rode two metres under it. The
+  winding is now left alone.
+- Starting an engine session does not look for grind rails; installing a world
+  does. The first world is installed again straight after the session starts.
+- The game binds the keyboard to the pad (P is R2, Space is Cross, R is
+  Triangle, I/J/K/L the right stick), so key presses sent to the game window
+  with `SendInput` exercise the real input path without a controller.
 - `CollideMeshRenderer`'s camera maths did not put geometry on screen in Jak 3;
   the skateboard uses the background shaders' `pc_camera` projection, now also
   kept in `SharedRenderState::camera_pc`.

@@ -1,0 +1,76 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Manual check: what the collide cache returns under Jak, with
+;; the bridge's collision filter and with Jak's own. Loads Haven City's port
+;; first when *sk3k-port?* is set. Not part of any DGO.
+
+(define *sk3k-phase* 0)
+(define *sk3k-count* 0)
+(define *sk3k-port?* #t)
+
+(defun sk3k-fill ((label string) (with collide-spec) (ignore pat-surface))
+  (let ((cquery (new 'stack-no-clear 'collide-query))
+        (pos (-> *target* control trans)))
+    (set! (-> cquery collide-with) with)
+    (set! (-> cquery ignore-process0) #f)
+    (set! (-> cquery ignore-process1) #f)
+    (set! (-> cquery ignore-pat) ignore)
+    (set! (-> cquery action-mask) (collide-action solid))
+    (set-vector! (-> cquery bbox min) (- (-> pos x) (meters 4)) (- (-> pos y) (meters 12)) (- (-> pos z) (meters 4)) 1.0)
+    (set-vector! (-> cquery bbox max) (+ (-> pos x) (meters 4)) (+ (-> pos y) (meters 12)) (+ (-> pos z) (meters 4)) 1.0)
+    (fill-using-bounding-box *collide-cache* cquery)
+    (let ((lo 1000000000.0)
+          (hi -1000000000.0)
+          (near 1000000000.0)
+          (near-y 0.0))
+      (dotimes (i (-> *collide-cache* num-tris))
+        (let ((tri (-> *collide-cache* tris i)))
+          (dotimes (v 3)
+            (let ((y (-> tri vertex v y)))
+              (if (< y lo) (set! lo y))
+              (if (> y hi) (set! hi y))
+              (when (< (fabs (- y (-> pos y))) near)
+                (set! near (fabs (- y (-> pos y))))
+                (set! near-y y))))))
+      (format 0 "SK3TEST ~S: ~D tris ~D prims, y from ~m to ~m"
+              label (-> *collide-cache* num-tris) (-> *collide-cache* num-prims) lo hi)
+      (format 0 ", nearest to Jak ~m (Jak ~m)~%" near-y (-> pos y))))
+  (none))
+
+(defun sk3k-tick ()
+  (cond
+    ((not *target*) #f)
+    ((= *sk3k-phase* 0)
+     (when (!= (-> *target* next-state name) 'target-continue)
+       (if *sk3k-port?*
+           (start 'play (get-continue-by-name *game-info* "ctyport-start")))
+       (set! *sk3k-count* 0)
+       (set! *sk3k-phase* 1)))
+    ((= *sk3k-phase* 1)
+     (+! *sk3k-count* 1)
+     (when (and (!= (-> *target* next-state name) 'target-continue) (> *sk3k-count* 600))
+       (format 0 "SK3TEST Jak at ~m ~m ~m state ~A"
+               (-> *target* control trans x) (-> *target* control trans y) (-> *target* control trans z)
+               (-> *target* state name))
+       (format 0 " ground-pat #x~X gspot-y ~m~%"
+               (-> *target* control ground-pat) (-> *target* control gspot-pos y))
+       (format 0 "SK3TEST Jak's own collide-with #x~X~%" (-> *target* control root-prim prim-core collide-with))
+       (sk3k-fill "bridge filter (backgnd)" (collide-spec backgnd)
+                  (new 'static 'pat-surface :noentity #x1 :nojak #x1 :probe #x1 :noendlessfall #x1))
+       (sk3k-fill "backgnd, nothing ignored" (collide-spec backgnd) (new 'static 'pat-surface))
+       (sk3k-fill "Jak's own collide-with" (-> *target* control root-prim prim-core collide-with)
+                  (new 'static 'pat-surface :noentity #x1 :nojak #x1 :probe #x1 :noendlessfall #x1))
+       (sk3k-fill "everything" (the-as collide-spec -1) (new 'static 'pat-surface))
+       (format 0 "SK3TEST done~%")
+       (set! *sk3k-phase* 2))))
+  (none))
+
+(set! *sk3k-phase* 0)
+(format 0 "SK3TEST begin~%")
+(process-spawn-function process :name "sk3-collide"
+  (lambda :behavior process ()
+    (loop
+      (sk3k-tick)
+      (suspend)))
+  :to *display-pool*)

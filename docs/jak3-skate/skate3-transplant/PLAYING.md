@@ -50,37 +50,50 @@ Trick names and Skate 3's score are shown as plain text; set
 
 ## What works
 
-Checked on Jak 3 NTSC in Spargus, with scripted input and screenshots:
+Checked on Jak 3 NTSC (SCUS-97330) through the manual checks listed below,
+watching the game's log and screenshots:
 
-- Riding, pushing and steering on the level's own collision, following slopes.
-- Skate 3's Flickit recognising tricks (ollie, kickflip) and naming them.
-- Jak in the Skate 3 skater's poses, on Skate 3's own skateboard model, with
-  Daxter on his shoulder.
-- Bails: Jak ragdolls, the board tumbles away, and he is put back on it.
-- Switching to the jetboard and back, and getting off and on again.
+- **Real input.** Key presses sent to the game window, which the game binds to
+  the pad, mounted the board (R2), pushed to about 11.9 m/s (Cross), steered
+  (left stick), did an ollie and a kickflip from right-stick gestures, switched
+  to the jetboard and back, and dismounted (Triangle), twice over.
+- **Riding** on the level's own collision in Spargus and on Haven City's port,
+  following slopes and stopping at walls.
+- **Tricks** recognised, named and scored by Skate 3's own logic: ollie,
+  kickflip.
+- **Grinds.** Restarted above grind rails the engine had found in Spargus, the
+  skater ground 9 or 10 of 30 of them in most runs (2 of 30 in one), named by
+  the engine as 50-50, 5-0, feeble, nose, boardslide and blunt slide, the
+  longest lasting 134 frames.
+- **The look.** Jak is in the Skate 3 skater's poses, on Skate 3's own
+  skateboard model, with Daxter on his shoulder.
+- **Bails.** Jak ragdolls, the board tumbles away, and he is put back on it at
+  the last place the wheels were down.
+- **Water.** Riding off a pier in Haven City's port, the bridge handed over to
+  the jetboard at the water's surface and Jak rode on across it.
+- **Hand-overs.** Switching to the jetboard and back, getting off and on again,
+  and dying and respawning, all leave the game in a normal state.
 
 ## Known limits
 
-- **Not tried with a real controller.** Everything above was driven by scripted
-  input. The pad translation was checked against made-up pad states
-  (`skate3-bridge-pad.gc`: sticks, buttons and triggers all map as intended),
-  but nobody has held a pad.
+- **No physical controller has been used.** Key presses reach the same pad
+  code a controller does, but they are all-or-nothing, so partial stick
+  deflection, and how the Flickit gestures feel by hand, are untested.
 - **Only the level's solid background is known to the engine.** Moving
   platforms, doors, vehicles and characters are not obstacles to the
-  skateboard, and it cannot ride on them. In deep water the bridge hands over
-  to the jetboard and comes back a second after Jak is out; that hand-over is
-  written but has not been exercised. If Jak drops 30 m below where the board
-  last touched down the bridge switches off and the jetboard takes over.
+  skateboard, and it cannot ride on them. If Jak drops 30 m below where the
+  board last touched down the bridge switches off and the jetboard takes over.
 - **Jak can still touch things.** Triggers, pickups and characters react to him
   as usual; skating into citizens can make Spargus's guards open fire.
-- **Grinds are untested.** The engine finds grindable edges in the level
-  (about 80 to 135 around Jak in Spargus) but no grind was performed.
+- **Grinding by hand is untested.** The grinds above started from a restart
+  placed over the rail, not from an ollie onto it.
 - **No skateboard sounds.** The jetboard's sounds are silenced while skating and
   nothing replaces them.
 - **The camera is Jak's own**, not Skate 3's, and the right stick no longer
   turns it while skating.
 - **Jak's head and fingers do not move**; they ride on his chest and hands.
-- **Missions and scripted sequences have not been tried.**
+- **Missions, cutscenes and levels other than Spargus and the port have not
+  been tried.**
 - **Frame rates other than 60** have only been exercised through the clock path
   at 60; the engine is stepped from game time at its own fixed rate.
 
@@ -96,7 +109,14 @@ resets the game when it disconnects):
 (ml "goal_src/jak3/pc/debug/skate3-bridge-look.gc")   ; screenshots of the poses
 (ml "goal_src/jak3/pc/debug/skate3-bridge-cycle.gc")  ; toggling, kickflip, bail, dismount
 (ml "goal_src/jak3/pc/debug/skate3-bridge-pad.gc")    ; pad translation
+(ml "goal_src/jak3/pc/debug/skate3-bridge-grind.gc")  ; grinds on the engine's rails
+(ml "goal_src/jak3/pc/debug/skate3-bridge-explore.gc"); Spargus slope, then Haven's port and its water
+(ml "goal_src/jak3/pc/debug/skate3-bridge-observe.gc"); watches while you play
 ```
+
+`skate3-bridge-grind.gc` needs an engine library that also exports
+`sk_debug_rail_count` and `sk_debug_rail` (a small local addition to
+`skate-ffi`); with a stock library it reports that and stops.
 
 Each prints `SK3TEST` lines to the `gk` console; the last two also save
 `sk3-*.png` to the user screenshots folder.

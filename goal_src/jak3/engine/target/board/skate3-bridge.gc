@@ -454,10 +454,20 @@
      ;; on them by the postbind), touching, shadow and powerups.
      (target-no-move-post)
      (target-board-joint-points)
-     ;; The engine only knows the solid bottom. In deep water, hand over to the
-     ;; jetboard until Jak is out again.
-     (when (and (logtest? (water-flag touch-water) (-> self water flags))
-                (logtest? (water-flag swimming under-water) (-> self water flags)))
+     ;; The engine only knows the solid bottom, so a skateboard would sink
+     ;; through water. Where the game knows of water here and the board has
+     ;; reached its surface, or Jak is already in deep, hand over to the
+     ;; jetboard, which rides on it, until he is out again.
+     (when (or (and (logtest? (water-flag active) (-> self water flags))
+                    (< (-> self control trans y) (+ (-> self water height) (meters 0.2))))
+               (and (logtest? (water-flag touch-water) (-> self water flags))
+                    (logtest? (water-flag swimming under-water) (-> self water flags))))
+       (when (< (-> self control trans y) (-> self water height))
+         ;; already below the surface: back up to it
+         (let ((surface (new 'stack-no-clear 'vector)))
+           (vector-copy! surface (-> self control trans))
+           (set! (-> surface y) (+ (-> self water height) (meters 0.2)))
+           (move-to-point! (-> self control) surface)))
        (set! *jak3-skate3-bridge-in-water* #t)
        (set! *skate3-bridge-dry-time* (current-time))
        (set! *jak3-skate3-bridge-enabled* #f))
