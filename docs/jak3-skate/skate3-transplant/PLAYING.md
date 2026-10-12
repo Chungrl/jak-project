@@ -163,6 +163,9 @@ watching the game's log and screenshots:
 
 ## Manual checks
 
+The scripted bridge check is `bash scripts/jak3-skate/verify.sh`; other checks
+are run with the scripts in `scripts/jak3-skate/`.
+
 With `gk` running in debug mode and a REPL connected and left open (`goalc`
 resets the game when it disconnects):
 
