@@ -419,7 +419,10 @@
       (set! *jak3-skate3-bridge-in-water* #f)
       (set! *jak3-skate3-bridge-enabled* #t)))
   (cond
-    ((not *jak3-skate3-bridge-enabled*)
+    ((or (not *jak3-skate3-bridge-enabled*)
+         ;; a cutscene or script has taken hold of Jak, or he is dead: the game
+         ;; moves him now. The bridge picks up again by itself afterwards.
+         (focus-test? self grabbed dead))
      (if *jak3-skate3-bridge-active*
          (target-skate3-bridge-release))
      #f)

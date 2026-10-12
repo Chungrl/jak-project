@@ -1,0 +1,108 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Manual check that left and right are not mirrored between Jak
+;; and the Skate 3 engine, and that a cutscene-style grab takes Jak away from
+;; the bridge. Not part of any DGO.
+;;  - Jak's own right-hand side is measured from his shoulders before mounting.
+;;  - On the board, the left stick is held right and the change of heading is
+;;    compared with that side.
+;;  - Which foot leads on the board is reported (left foot forward is the
+;;    regular stance Skate 3 starts in).
+;;  - Jak is grabbed and released, as a cutscene does.
+
+(define *sk3s-phase* 0)
+(define *sk3s-timer* 0)
+(define *sk3s-count* 0)
+(define *sk3s-native-side* 0.0)
+(define *sk3s-heading* (new 'global 'vector))
+
+(defun sk3s-side ((forward vector) (other vector))
+  "Positive or negative depending on which side of forward the other vector is."
+  (- (* (-> forward z) (-> other x)) (* (-> forward x) (-> other z))))
+
+(defun sk3s-next ((frames int))
+  (+! *sk3s-phase* 1)
+  (set! *sk3s-timer* frames)
+  (none))
+
+(defun sk3s-log ((label string))
+  (format 0 "SK3TEST ~S target ~A enabled ~A active ~A grabbed ~A postbind ~A~%"
+          label (-> *target* state name) *jak3-skate3-bridge-enabled* *jak3-skate3-bridge-active*
+          (focus-test? *target* grabbed)
+          (if (= (-> *target* skel postbind-function) skate3-bridge-postbind) 'bridge #f))
+  (none))
+
+(defun sk3s-tick ()
+  (let ((io *skate3-bridge-io*)
+        (phase *sk3s-phase*))
+    (cond
+      ((not *target*) #f)
+      ((> *sk3s-timer* 0) (+! *sk3s-timer* -1))
+      ((= phase 0)
+       (when (!= (-> *target* next-state name) 'target-continue)
+         (let ((forward (vector-z-quaternion! (new 'stack-no-clear 'vector) (-> *target* control quat)))
+               (across (vector-! (new 'stack-no-clear 'vector)
+                                 (-> *target* node-list data 25 bone transform trans)
+                                 (-> *target* node-list data 16 bone transform trans))))
+           (set! *sk3s-native-side* (sk3s-side forward across))
+           (format 0 "SK3TEST on foot: Jak's right shoulder is on the ~S side (~f)~%"
+                   (if (> *sk3s-native-side* 0.0) "positive" "negative") *sk3s-native-side*))
+         (set! *jak3-skate3-bridge-scripted-input* #t)
+         (skate3-bridge-clear-input! io)
+         (send-event *target* 'change-mode 'board #f)
+         (set! *sk3s-count* 0)
+         (sk3s-next 0)))
+      ((= phase 1)
+       (+! *sk3s-count* 1)
+       (if (or (and *jak3-skate3-bridge-active* (> *sk3s-count* 120)) (> *sk3s-count* 1500))
+           (sk3s-next 0)))
+      ((= phase 2)
+       ;; get rolling
+       (set! (-> io buttons) (the-as uint #x1000))
+       (sk3s-next 120))
+      ((= phase 3)
+       (vector-copy! *sk3s-heading* (-> io forward))
+       (let ((lead (vector-! (new 'stack-no-clear 'vector)
+                             (-> *target* node-list data 41 bone transform trans)
+                             (-> *target* node-list data 47 bone transform trans))))
+         (format 0 "SK3TEST on the board: ~S foot leads (~f)~%"
+                 (if (> (vector-dot lead (-> io forward)) 0.0) "left" "right")
+                 (vector-dot lead (-> io forward))))
+       ;; left stick held right
+       (set! (-> io left-x) 1.0)
+       (sk3s-next 45))
+      ((= phase 4)
+       (let ((turn (sk3s-side *sk3s-heading* (-> io forward))))
+         (format 0 "SK3TEST stick right turned towards the ~S side (~f): ~S~%"
+                 (if (> turn 0.0) "positive" "negative") turn
+                 (if (> (* turn *sk3s-native-side*) 0.0)
+                     "Jak's right, not mirrored"
+                     "Jak's LEFT, MIRRORED")))
+       (skate3-bridge-clear-input! io)
+       (sk3s-next 60))
+      ((= phase 5)
+       ;; a cutscene grabs Jak
+       (sk3s-log "before-grab")
+       (process-grab? *target* #f)
+       (sk3s-next 90))
+      ((= phase 6)
+       (sk3s-log "grabbed")
+       (process-release? *target*)
+       (sk3s-next 120))
+      ((= phase 7)
+       (sk3s-log "released")
+       (set! *jak3-skate3-bridge-scripted-input* #f)
+       (format 0 "SK3TEST done~%")
+       (sk3s-next 0))))
+  (none))
+
+(set! *sk3s-phase* 0)
+(set! *sk3s-timer* 0)
+(format 0 "SK3TEST begin~%")
+(process-spawn-function process :name "sk3-steer"
+  (lambda :behavior process ()
+    (loop
+      (sk3s-tick)
+      (suspend)))
+  :to *display-pool*)
