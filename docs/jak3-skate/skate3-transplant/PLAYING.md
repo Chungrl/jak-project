@@ -77,6 +77,10 @@ watching the game's log and screenshots:
   the last place the wheels were down.
 - **Water.** Riding off a pier in Haven City's port, the bridge handed over to
   the jetboard at the water's surface and Jak rode on across it.
+- **Falling out of the world.** Started under the ground with nothing beneath
+  him, the skater fell 30 m, the bridge said so and switched off, Jak was put
+  back where the board had last stood and given the jetboard, and switching
+  the bridge on again worked; three times running (`skate3-bridge-fallout.gc`).
 - **Hand-overs.** Switching to the jetboard and back, getting off and on again,
   and dying and respawning, all leave the game in a normal state. When a
   cutscene or script grabs Jak the bridge lets go and picks up again afterwards.
@@ -151,6 +155,7 @@ resets the game when it disconnects):
 (ml "goal_src/jak3/pc/debug/skate3-bridge-steer.gc")  ; mirror check, partial stick, cutscene grab
 (ml "goal_src/jak3/pc/debug/skate3-bridge-ollie-grind.gc") ; roll at rails and ollie onto them
 (ml "goal_src/jak3/pc/debug/skate3-bridge-levels.gc") ; six more levels, with foot height above ground
+(ml "goal_src/jak3/pc/debug/skate3-bridge-fallout.gc"); falling out of the world and recovering
 ```
 
 `skate3-bridge-grind.gc` and `skate3-bridge-ollie-grind.gc` need an engine library that also exports

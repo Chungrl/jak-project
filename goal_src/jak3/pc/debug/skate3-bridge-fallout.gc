@@ -1,10 +1,10 @@
 ;;-*-Lisp-*-
 (in-package goal)
 
-;; (AI-assisted) Manual check of the fall-out path: the skater is restarted far
-;; outside the level, where the engine has no ground, so he falls until the
-;; bridge gives up, puts Jak back and hands him the jetboard. The bridge is
-;; then switched on again. Repeated three times. Not part of any DGO.
+;; (AI-assisted) Manual check of the fall-out path: the skater is restarted a
+;; few metres under the ground, where there is nothing beneath him, so he falls
+;; until the bridge gives up, puts Jak back and hands him the jetboard. The
+;; bridge is then switched on again. Repeated three times. Not part of any DGO.
 
 (define *sk3f-phase* 0)
 (define *sk3f-timer* 0)
@@ -39,10 +39,9 @@
        (cond
          ((and *jak3-skate3-bridge-active* (> *sk3f-count* 120))
           (sk3f-log "riding")
-          ;; out over nothing
+          ;; under the level, with nothing below
           (vector-copy! *skate3-bridge-restart-pos* *sk3f-home*)
-          (+! (-> *skate3-bridge-restart-pos* x) (meters 600))
-          (+! (-> *skate3-bridge-restart-pos* y) (meters 5))
+          (+! (-> *skate3-bridge-restart-pos* y) (meters -4))
           (set-vector! *skate3-bridge-restart-dir* 0.0 0.0 1.0 0.0)
           (set! *skate3-bridge-restart-speed* 0.0)
           (set! *skate3-bridge-restart?* #t)
