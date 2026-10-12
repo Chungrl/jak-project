@@ -11,9 +11,8 @@ GitHub. It is a proposal for review.
 | Branch | `experiment/opus-skate-review` |
 | Last verified code | `b8dbedaad` |
 | On GitHub | No. The branch tracks `origin/jak3-skate-controls` (`6b30da8e8`) and is 24 commits ahead of it, 0 behind. No remote branch contains `b8dbedaad`. |
-| Uncommitted | Level shadows, first version: 11 files changed and 2 new shaders under `game/graphics/` plus `kmachine.cpp`, `kernel-defs.gc`, `pckernel.gc`. It compiles and has never been run. A copy is kept as `skate3-work\run\level-shadows-wip-on-b8dbedaad.patch`. |
+| Unverified work | Level shadows, first version, on its own branch `wip/level-shadows` (`58aea2d45`, one commit on top of `a60c7031c`): 11 files changed and 2 new shaders under `game/graphics/` plus `kmachine.cpp`, `kernel-defs.gc`, `pckernel.gc`. It compiles and has never been run. |
 | Outside git | `C:\Users\Alan\Projects\skate3-work`: the engine sources with local additions (rail debug exports, spin naming), the built `skate_ffi.dll`, the converted Skate 3 data, the test scripts (`tools\`), the agents' brief (`AGENT_BRIEF.md`). None of it is version controlled. |
-| Built binaries | `out/build/Release` is built from the tree with the uncommitted level shadows, not from `b8dbedaad`. |
 
 How `b8dbedaad` was verified, all on one machine (RTX 5070, Jak 3 NTSC):
 
@@ -22,11 +21,17 @@ How `b8dbedaad` was verified, all on one machine (RTX 5070, Jak 3 NTSC):
 - Real key presses (`run-skate-keys.sh play`): mounted several times with no
   hold over 30 ms, pushed to 16-19 m/s, names OLLIE 180, OLLIE 360, FS 180,
   LATE KICKFLIP 360, BS POWERSLIDE, dismounted and remounted.
-- `skate3-bridge-test.gc` (scripted): passed at `64770152a`; the bridge code
-  changed after that and this check was not re-run at `b8dbedaad`.
-- `gfx-enhance-compare.gc`: captures at five start points and the pause menu
-  looked at, at `64770152a`; the renderer has not changed since in committed
-  code.
+
+Run again on 2026-10-12 from a clean build of `a60c7031c` (the same code as
+`b8dbedaad`):
+
+- `skate3-bridge-test.gc`: finished with the bridge active, 4 pops, 6
+  landings, no bails.
+- `skate3-bridge-spin.gc`: finished with the same names as above.
+- `gfx-enhance-compare.gc`: completed at all five start points with no shader
+  errors; GPU cost 1.76 ms for the shading and 0.24 ms for the bloom. One of
+  the sheets was looked at; the rest were looked at when the enhancement was
+  committed (`64770152a`), and the committed renderer has not changed since.
 
 ## What exists
 
@@ -61,9 +66,10 @@ lighting; upscaling (DLSS cannot attach to an OpenGL renderer).
 
 Two Codex tasks were launched before this proposal: skate audio research
 (read-only) and testing the level shadows. Both blocked at start waiting for
-standard input and did nothing; no Codex session contains their prompts and
-the game log has not changed since before they were launched. They appear
-below as S-01 and G-01. Their prompts are in `skate3-work\run\codex\`.
+standard input and did nothing, and were closed with the owner's approval.
+They appear below as skate-01 and gfx-01; their prompts are in the work
+folder under `run/codex/`. (`codex exec` reads standard input when it is not
+a terminal: launch it with `< /dev/null`.)
 
 ## Ticket shape
 
@@ -121,7 +127,7 @@ one at a time.
 ### Graphics
 
 **[gfx-01] Level shadows: test, fix, tune** (`agent:codex`, ready; pictures reviewed before merge)
-- Scope: the uncommitted first version (patch in the work folder). Prompt already written: `skate3-work\run\codex\shadows.prompt.md`.
+- Scope: the first version on branch `wip/level-shadows`. Prompt already written, in the work folder: `run/codex/shadows.prompt.md`.
 - Acceptance: outdoors, shadows of buildings, rocks and walls on the side away from the sun, attached at the foot, stable as the camera turns; no speckle on lit ground; sewer and pause menu unchanged; GPU cost reported; `VERIFY` passes.
 - Verify: `VERIFY`; `bash scripts/jak3-skate/shoot.sh`, sheets attached.
 
@@ -149,7 +155,7 @@ one at a time.
 ### Skate
 
 **[skate-01] Skate audio research** (`agent:codex`, ready, read-only)
-- Prompt already written: `skate3-work\run\codex\audio-research.prompt.md`. Output: `skate3-transplant/codex-audits/skate-audio.md`.
+- Prompt already written, in the work folder: `run/codex/audio-research.prompt.md`. Output: `skate3-transplant/codex-audits/skate-audio.md`.
 
 **[skate-02] Skateboard sounds** (`agent:codex`, blocked on skate-01 and on a decision, `needs:human`)
 - Which of the three routes in skate-01's report to take is a product decision (Skate 3's own sounds from the user's data, or Jak's).
@@ -193,13 +199,16 @@ infra-01 first: every verification command depends on it. Then gfx-01 and
 skate-01, which are already specified. skate-06, skate-08 to skate-11 and
 gfx-05 only measure, and tell us which of the remaining tickets matter most.
 
-## Decisions needed
+## Decisions
 
-1. `AGENTS.md` in this repository says agents never create an issue or a pull
-   request. The ticket workflow does both, on your fork. That file needs a
-   line allowing it there before any agent follows this plan.
-2. Pushing `experiment/opus-skate-review`, so the checkpoint is on GitHub and
-   the isolated clone can start from it.
-3. The two stalled Codex tasks: end them and relaunch as tickets, or leave.
-4. Whether pictures are reviewed by the planning session before every
-   graphics merge (proposed: yes).
+Answered by the owner on 2026-10-12:
+
+1. `AGENTS.md` said agents never create an issue or a pull request. Allowed on
+   the fork only; the file now says so.
+2. Push the work to GitHub: yes.
+3. The two stalled Codex tasks: closed; they become tickets.
+4. Enable Issues on the fork and create this backlog: yes. No ticket is to be
+   started until the owner says so.
+
+Still open: whether pictures are reviewed by the planning session before
+every graphics merge (proposed: yes).

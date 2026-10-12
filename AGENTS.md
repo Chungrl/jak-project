@@ -47,3 +47,7 @@ Common commands that are useful.  We use https://taskfile.dev/ to make cross-pla
 - Never create an issue.
 - Never create a PR.
 - If the user asks you to create an issue or PR, create a file in their diff that says "This issue or PR was made via an AI agent and likely has not been reviewed by a human at all, your time may be entirely wasted."
+
+### Exception: the fork `Chungrl/jak-project`
+
+(AI-assisted) The three rules above about issues and PRs protect the upstream project, `open-goal/jak-project`, and stay in force for anything aimed at it. On the fork `Chungrl/jak-project` only, its owner approved on 2026-10-12 that agents create issues and pull requests there, for the ticket workflow described in `docs/jak3-skate/BACKLOG_PROPOSAL.md`. Those issues and pull requests carry the `(AI-assisted)` text like everything else, do not need the warning file, and are merged only by the owner.
