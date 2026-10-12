@@ -6,14 +6,14 @@
 ;; engine library built with the local sk_debug_rail addition), the skater is
 ;; restarted on the ground beside it, rolling towards it at a shallow angle,
 ;; and does a Flickit ollie as he closes on it. A grind that follows a pop is
-;; reported. Each rail is tried from both sides and at two ollie distances.
+;; reported. Each rail is tried from both sides and at three ollie distances.
 ;; Not part of any DGO.
 
 (define *sk3og-phase* 0)   ;; 0 mount, 1 wait, 2 next trial, 3 approach, 4 flick down, 5 flick up, 6 watch, 7 finished
 (define *sk3og-timer* 0)
 (define *sk3og-count* 0)
 (define *sk3og-rail* 0)
-(define *sk3og-variant* 4)  ;; 0..3 within a rail; 4 means move to the next rail
+(define *sk3og-variant* 6)  ;; 0..5 within a rail; 6 means move to the next rail
 (define *sk3og-rails-tried* 0)
 (define *sk3og-trials* 0)
 (define *sk3og-found* 0)
@@ -30,7 +30,7 @@
 (define *sk3og-min-lateral* 0.0)
 (define *sk3og-trigger-dy* 0.0)
 (define *sk3og-peak-dy* 0.0)
-(defconstant SK3OG_MAX_RAILS 14)
+(defconstant SK3OG_MAX_RAILS 12)
 
 (defun sk3og-shot ((name string))
   (set! (-> *screen-shot-settings* width) 1920)
@@ -57,7 +57,7 @@
          (let* ((a (-> io position))
                 (dir (vector-! (new 'stack-no-clear 'vector) (-> io velocity) a))
                 (len (vector-length dir)))
-           (when (and (> len (meters 3.5)) (< (fabs (-> dir y)) (* 0.1 len)))
+           (when (and (> len (meters 4)) (< (fabs (-> dir y)) (* 0.1 len)))
              (vector-copy! *sk3og-a* a)
              (set! (-> dir y) 0.0)
              (vector-normalize! dir 1.0)
@@ -70,13 +70,17 @@
 
 (defun sk3og-start-trial ()
   "Restart the skater beside the rail, rolling towards it."
-  (let* ((side (if (< *sk3og-variant* 2) 1.0 -1.0))
-         (along (fmin (- *sk3og-len* (meters 0.5)) (meters 4.5)))
+  (let* ((side (if (< *sk3og-variant* 3) 1.0 -1.0))
+         (along (fmin (- *sk3og-len* (meters 0.5)) (meters 6.5)))
          (target (vector+float*! (new 'stack-no-clear 'vector) *sk3og-a* *sk3og-dir* (+ (meters 0.5) along)))
          (heading (new 'stack-no-clear 'vector)))
-    (set! *sk3og-trigger* (if (= (logand *sk3og-variant* 1) 0) (meters 1.0) (meters 1.6)))
+    ;; from the ollie gesture to landing the board covers about 2 m sideways at this angle
+    (set! *sk3og-trigger* (case (mod *sk3og-variant* 3)
+                            ((0) (meters 1.6))
+                            ((1) (meters 2.0))
+                            (else (meters 2.4))))
     (vector+float*! *skate3-bridge-restart-pos* *sk3og-a* *sk3og-dir* (meters 0.5))
-    (vector+float*! *skate3-bridge-restart-pos* *skate3-bridge-restart-pos* *sk3og-normal* (* side (meters 2.5)))
+    (vector+float*! *skate3-bridge-restart-pos* *skate3-bridge-restart-pos* *sk3og-normal* (* side (meters 3)))
     (+! (-> *skate3-bridge-restart-pos* y) (meters 0.4))
     (vector-! heading target *skate3-bridge-restart-pos*)
     (set! (-> heading y) 0.0)
@@ -163,7 +167,7 @@
          (sk3og-finish)))
       ((= *sk3og-phase* 2)
        (set! *sk3og-count* 0)
-       (when (>= *sk3og-variant* 4)
+       (when (>= *sk3og-variant* 6)
          (set! *sk3og-variant* 0)
          (cond
            ((and (< *sk3og-rails-tried* SK3OG_MAX_RAILS) (sk3og-find-rail))
@@ -219,7 +223,7 @@
   (none))
 
 (set! *sk3og-phase* 0)
-(set! *sk3og-variant* 4)
+(set! *sk3og-variant* 6)
 (set! *sk3og-rail* 0)
 (set! *sk3og-rails-tried* 0)
 (set! *sk3og-trials* 0)

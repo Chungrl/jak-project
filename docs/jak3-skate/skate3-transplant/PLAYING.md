@@ -88,15 +88,15 @@ watching the game's log and screenshots:
   skateboard, and it cannot ride on them. If Jak drops 30 m below where the
   board last touched down the bridge switches off and the jetboard takes over.
 - **Jak can still touch things.** Triggers, pickups and characters react to him
-  as usual.
-- **Grinding from an ollie is hard to hit.** The grinds above started from a
-  restart placed over the rail. Rolling at a rail and doing an ollie by script
-  reached a grind once in 112 approaches (named an over-willy grind by the
-  engine); whether a person finds it easier is untested.
-- **Spargus's guards.** In the long checks Jak was repeatedly shot dead by the
-  guards. The jetboard only attacks what it touches during its own spin and
-  zap moves, which the bridge does not use, so this is most likely the game's
-  usual reaction to citizens being run into, but that was not established.
+  as usual. The jetboard damages anything it touches, which in Spargus turns
+  the citizens hostile and gets Jak shot; while the bridge drives the board
+  that damage is switched off (`*jak3-skate3-bridge-harmless*`), and a
+  50-second ride past them then cost him no health.
+- **Grinding from an ollie is hard to hit by script.** Most of the grinds above
+  started from a restart placed over the rail. Rolling at a rail and doing an
+  ollie by script, without knowing which side of it is the low one, ended in a
+  grind in 2 of 184 approaches (an over-willy for 6 frames and a 50-50 for 47);
+  whether a person finds it easier is untested.
 - **No skateboard sounds.** The jetboard's sounds are silenced while skating and
   nothing replaces them.
 - **The camera is Jak's own**, not Skate 3's, and the right stick no longer

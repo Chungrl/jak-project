@@ -24,8 +24,11 @@
                 (vector-length (-> io velocity)))
         (format 0 " pos ~m ~m ~m"
                 (-> *target* control trans x) (-> *target* control trans y) (-> *target* control trans z))
-        (format 0 " pad #x~X lx ~f ly ~f rx ~f ry ~f~%"
-                (-> io buttons) (-> io left-x) (-> io left-y) (-> io right-x) (-> io right-y))))
+        (format 0 " pad #x~X lx ~f ly ~f rx ~f ry ~f"
+                (-> io buttons) (-> io left-x) (-> io left-y) (-> io right-x) (-> io right-y))
+        (format 0 " danger ~A dangerous ~A attacks ~D health ~f~%"
+                (-> *target* control danger-mode) (focus-test? *target* dangerous)
+                (-> *target* control attack-count) (-> *target* fact health))))
     (if (= *sk3o-frame* *sk3o-frames*)
         (format 0 "SK3TEST done~%"))
     (+! *sk3o-frame* 1))

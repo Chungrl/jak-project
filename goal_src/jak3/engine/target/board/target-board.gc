@@ -748,6 +748,11 @@
               (target-timed-invulnerable (seconds 0.5) self 2)
               )
             )
+           ;; (AI-assisted) the jetboard hurts whatever it touches (2 damage, which
+           ;; turns Spargus's citizens hostile); a skateboard does not
+           ((#if PC_PORT (and *jak3-skate3-bridge-active* *jak3-skate3-bridge-harmless*) #f)
+            #f
+            )
            (else
              (let ((a1-17 (new 'stack-no-clear 'event-message-block)))
                (set! (-> a1-17 from) (process->ppointer self))

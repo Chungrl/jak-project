@@ -81,6 +81,9 @@
 
 (define *jak3-skate3-bridge-enabled* #f)
 (define *jak3-skate3-bridge-active* #f)
+;; The jetboard damages anything it touches, which turns bystanders hostile.
+;; While the bridge drives the board that is switched off unless this is #f.
+(define *jak3-skate3-bridge-harmless* #t)
 ;; Whether gk was started with the bridge's environment variables: 'unknown
 ;; until first asked, then #t or #f.
 (define *jak3-skate3-bridge-configured* 'unknown)
@@ -280,7 +283,10 @@
                                     (tex1-1 (new 'static 'gs-tex1 :mmag #x1 :mmin #x1)))
       (when (and (> (-> io tricks) 0)
                  (< (- (-> *display* real-clock frame-counter) *skate3-hud-trick-time*) (seconds 2.5)))
-        (draw-string-xy *skate3-trick-name* buf 256 350 (font-color yellow) (font-flags shadow kerning middle)))
+        ;; between the normal and the large font, so long grind names still fit
+        (let ((font-ctx (new 'stack 'font-context *font-default-matrix* 256 350 0.0 (font-color yellow) (font-flags shadow kerning middle large))))
+          (set! (-> font-ctx scale) 0.55)
+          (draw-string-adv *skate3-trick-name* buf font-ctx)))
       (when (nonzero? (-> io sequence-active))
         (clear *skate3-hud-string*)
         (format *skate3-hud-string* "~D x~D" (the int (-> io sequence)) (the int (-> io multiplier)))
