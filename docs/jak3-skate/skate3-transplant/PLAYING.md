@@ -110,9 +110,17 @@ watching the game's log and screenshots:
   50-second ride past them then cost him no health.
 - **Grinding from an ollie is hard to hit by script.** Most of the grinds above
   started from a restart placed over the rail. Rolling at a rail and doing an
-  ollie by script, without knowing which side of it is the low one, ended in a
-  grind in 2 of 184 approaches (an over-willy for 6 frames and a 50-50 for 47);
-  whether a person finds it easier is untested.
+  ollie by script ended in a grind in 2 of 264 approaches (an over-willy for
+  6 frames and a 50-50 for 47). The script aims blind; measuring the ground on
+  each side of the rail first did not improve it. Whether a person, who can
+  see the ledge, finds it easier is untested.
+- **Two unexplained game exits.** Twice in about fifty runs the test harness
+  reported that the game had gone, once during a level change and once after
+  the skater fell out of the world. Neither left a shutdown message in the
+  game's log or a crash record in Windows' event log, the harness's own check
+  for the game process turned out to be unreliable (now fixed), and neither
+  recurred in reruns of the same checks. Whether the game really exited is not
+  known.
 - **No skateboard sounds.** The jetboard's sounds are silenced while skating and
   nothing replaces them.
 - **The camera is Jak's own**, not Skate 3's, and the right stick no longer

@@ -1,0 +1,89 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Manual check of the fall-out path: the skater is restarted far
+;; outside the level, where the engine has no ground, so he falls until the
+;; bridge gives up, puts Jak back and hands him the jetboard. The bridge is
+;; then switched on again. Repeated three times. Not part of any DGO.
+
+(define *sk3f-phase* 0)
+(define *sk3f-timer* 0)
+(define *sk3f-count* 0)
+(define *sk3f-round* 0)
+(define *sk3f-home* (new 'global 'vector))
+
+(defun sk3f-log ((label string))
+  (format 0 "SK3TEST ~S round ~D: Jak ~A enabled ~A active ~A"
+          label *sk3f-round* (-> *target* state name)
+          *jak3-skate3-bridge-enabled* *jak3-skate3-bridge-active*)
+  (format 0 ", pos ~m ~m ~m~%"
+          (-> *target* control trans x) (-> *target* control trans y) (-> *target* control trans z))
+  (none))
+
+(defun sk3f-tick ()
+  (let ((io *skate3-bridge-io*))
+    (cond
+      ((not *target*) #f)
+      ((> *sk3f-timer* 0) (+! *sk3f-timer* -1))
+      ((= *sk3f-phase* 0)
+       (when (!= (-> *target* next-state name) 'target-continue)
+         (vector-copy! *sk3f-home* (-> *target* control trans))
+         (set! *jak3-skate3-bridge-scripted-input* #t)
+         (skate3-bridge-clear-input! io)
+         (send-event *target* 'change-mode 'board #f)
+         (set! *sk3f-count* 0)
+         (set! *sk3f-phase* 1)))
+      ((= *sk3f-phase* 1)
+       ;; wait for the bridge to be driving
+       (+! *sk3f-count* 1)
+       (cond
+         ((and *jak3-skate3-bridge-active* (> *sk3f-count* 120))
+          (sk3f-log "riding")
+          ;; out over nothing
+          (vector-copy! *skate3-bridge-restart-pos* *sk3f-home*)
+          (+! (-> *skate3-bridge-restart-pos* x) (meters 600))
+          (+! (-> *skate3-bridge-restart-pos* y) (meters 5))
+          (set-vector! *skate3-bridge-restart-dir* 0.0 0.0 1.0 0.0)
+          (set! *skate3-bridge-restart-speed* 0.0)
+          (set! *skate3-bridge-restart?* #t)
+          (set! *sk3f-count* 0)
+          (set! *sk3f-phase* 2))
+         ((> *sk3f-count* 1500)
+          (sk3f-log "FAILED to start")
+          (format 0 "SK3TEST done~%")
+          (set! *sk3f-phase* 9))))
+      ((= *sk3f-phase* 2)
+       ;; falling: wait for the bridge to give up
+       (+! *sk3f-count* 1)
+       (when (or (not *jak3-skate3-bridge-enabled*) (> *sk3f-count* 900))
+         (sk3f-log "after the fall")
+         (set! *sk3f-timer* 90)
+         (set! *sk3f-phase* 3)))
+      ((= *sk3f-phase* 3)
+       (sk3f-log "on the jetboard")
+       (set! *jak3-skate3-bridge-enabled* #t)
+       (set! *sk3f-timer* 240)
+       (set! *sk3f-phase* 4))
+      ((= *sk3f-phase* 4)
+       (sk3f-log "switched back on")
+       (+! *sk3f-round* 1)
+       (cond
+         ((< *sk3f-round* 3)
+          (set! *sk3f-count* 0)
+          (set! *sk3f-phase* 1))
+         (else
+          (set! *jak3-skate3-bridge-scripted-input* #f)
+          (format 0 "SK3TEST done~%")
+          (set! *sk3f-phase* 9))))))
+  (none))
+
+(set! *sk3f-phase* 0)
+(set! *sk3f-round* 0)
+(set! *sk3f-timer* 0)
+(format 0 "SK3TEST begin~%")
+(process-spawn-function process :name "sk3-fallout"
+  (lambda :behavior process ()
+    (loop
+      (sk3f-tick)
+      (suspend)))
+  :to *display-pool*)
