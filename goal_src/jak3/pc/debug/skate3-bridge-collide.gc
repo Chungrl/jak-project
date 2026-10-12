@@ -2,12 +2,13 @@
 (in-package goal)
 
 ;; (AI-assisted) Manual check: what the collide cache returns under Jak, with
-;; the bridge's collision filter and with Jak's own. Loads Haven City's port
-;; first when *sk3k-port?* is set. Not part of any DGO.
+;; the bridge's collision filter and with Jak's own, after loading the level
+;; named by *sk3k-level*. Not part of any DGO.
 
 (define *sk3k-phase* 0)
 (define *sk3k-count* 0)
-(define *sk3k-port?* #t)
+;; The start point to load first, or #f to stay where Jak is.
+(define *sk3k-level* "minea-start")
 
 (defun sk3k-fill ((label string) (with collide-spec) (ignore pat-surface))
   (let ((cquery (new 'stack-no-clear 'collide-query))
@@ -43,8 +44,8 @@
     ((not *target*) #f)
     ((= *sk3k-phase* 0)
      (when (!= (-> *target* next-state name) 'target-continue)
-       (if *sk3k-port?*
-           (start 'play (get-continue-by-name *game-info* "ctyport-start")))
+       (if *sk3k-level*
+           (start 'play (get-continue-by-name *game-info* *sk3k-level*)))
        (set! *sk3k-count* 0)
        (set! *sk3k-phase* 1)))
     ((= *sk3k-phase* 1)
@@ -56,7 +57,9 @@
        (format 0 " ground-pat #x~X gspot-y ~m~%"
                (-> *target* control ground-pat) (-> *target* control gspot-pos y))
        (format 0 "SK3TEST Jak's own collide-with #x~X~%" (-> *target* control root-prim prim-core collide-with))
-       (sk3k-fill "bridge filter (backgnd)" (collide-spec backgnd)
+       (sk3k-fill "background only" (collide-spec backgnd)
+                  (new 'static 'pat-surface :noentity #x1 :nojak #x1 :probe #x1 :noendlessfall #x1))
+       (sk3k-fill "bridge filter" (collide-spec backgnd obstacle pusher special-obstacle obstacle-for-jak)
                   (new 'static 'pat-surface :noentity #x1 :nojak #x1 :probe #x1 :noendlessfall #x1))
        (sk3k-fill "backgnd, nothing ignored" (collide-spec backgnd) (new 'static 'pat-surface))
        (sk3k-fill "Jak's own collide-with" (-> *target* control root-prim prim-core collide-with)

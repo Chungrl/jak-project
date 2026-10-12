@@ -10,9 +10,11 @@
 ;; the jetboard behaves exactly as before. With them set, riding the jetboard
 ;; is skateboarding, and Jak is given the jetboard if he does not have it yet.
 ;;
-;; The engine rides the level's own background collision: the triangles in a
+;; The engine rides the game's own collision: the background, and the meshes of
+;; solid objects such as platforms, doors and obstacles. The triangles in a
 ;; square around Jak are gathered through the collide cache and handed over,
-;; and gathered again as he moves. While the bridge is active it replaces the
+;; and gathered again as he moves, or every three quarters of a second while
+;; there are objects in it, since those can move. While the bridge is active it replaces the
 ;; jetboard's own movement update: Jak is put where the engine's board is, and
 ;; the skater's pose is fitted to his skeleton and written over his bones after
 ;; his own animation. Moving collision and the Skate camera are not wired.
@@ -122,6 +124,11 @@
 (define *skate3-bridge-world-center* (new 'global 'vector))
 ;; Cells of the last gather that filled the collide cache and so lost triangles.
 (define *skate3-bridge-world-overflows* 0)
+;; Whether the last gather had solid objects in it, and when it was.
+(define *skate3-bridge-world-objects?* #f)
+(define *skate3-bridge-world-time* (the-as time-frame 0))
+;; Frames the engine has had the skater off the board (its own walking mode).
+(define *skate3-bridge-off-board-frames* 0)
 ;; The engine only knows the level's solid background. If Jak drops this far
 ;; below where the board last touched down (off the level, or into water, which
 ;; the jetboard can cross and a skateboard cannot), he is handed back to it.
@@ -179,16 +186,18 @@
   (none))
 
 (defun skate3-bridge-gather-world ((center vector))
-  "Collect the background collision in a square around center for the engine.
+  "Collect the solid collision in a square around center for the engine.
    Leaves it pending: an activate or a world commit puts it to use."
   (let ((io *skate3-bridge-io*)
         (cquery (new 'stack-no-clear 'collide-query))
         (half (* 0.5 (the float SKATE3_WORLD_CELLS) SKATE3_WORLD_CELL_SIZE)))
     (set! (-> io command) 3)
     (pc-skate3-bridge io)
-    (set! (-> cquery collide-with) (collide-spec backgnd))
-    (set! (-> cquery ignore-process0) #f)
+    ;; the level itself, and the meshes of things Jak cannot pass through
+    (set! (-> cquery collide-with) (collide-spec backgnd obstacle pusher special-obstacle obstacle-for-jak))
+    (set! (-> cquery ignore-process0) *target*)
     (set! (-> cquery ignore-process1) #f)
+    (set! *skate3-bridge-world-objects?* #f)
     (set! (-> cquery ignore-pat)
           (new 'static 'pat-surface :noentity #x1 :nojak #x1 :probe #x1 :noendlessfall #x1))
     (set! (-> cquery action-mask) (collide-action solid))
@@ -204,6 +213,9 @@
                        (+ z0 SKATE3_WORLD_CELL_SIZE)
                        1.0))
         (fill-using-bounding-box *collide-cache* cquery)
+        ;; the background counts as one primitive; anything more is an object
+        (if (> (-> *collide-cache* num-prims) 1)
+            (set! *skate3-bridge-world-objects?* #t))
         (when (> (-> *collide-cache* num-tris) 0)
           (if (>= (-> *collide-cache* num-tris) 461)
               (+! *skate3-bridge-world-overflows* 1))
@@ -211,7 +223,8 @@
           (set! (-> io world-count) (the-as uint (-> *collide-cache* num-tris)))
           (set! (-> io command) 4)
           (pc-skate3-bridge io))))
-    (vector-copy! *skate3-bridge-world-center* center))
+    (vector-copy! *skate3-bridge-world-center* center)
+    (set! *skate3-bridge-world-time* (-> *display* base-clock frame-counter)))
   (none))
 
 (defun skate3-bridge-postbind ((draw draw-control) (nodes cspace-array) (jc joint-control))
@@ -328,6 +341,7 @@
     (set! *skate3-rig-count* 0)
     (set! *jak3-skate3-bridge-active* (= (pc-skate3-bridge io) 0))
     (set! *skate3-bridge-ground-y* (-> self control trans y))
+    (set! *skate3-bridge-off-board-frames* 0)
     (vector-copy! *skate3-bridge-safe-pos* (-> self control trans))
     (when *jak3-skate3-bridge-active*
       (target-skate3-bridge-rig-setup)
@@ -352,15 +366,27 @@
     (if (not *jak3-skate3-bridge-scripted-input*)
         (skate3-bridge-read-pad! io (-> self control cpad)))
     (cond
-      ((and (= (pc-skate3-bridge io) 0)
-            (begin
-              (if (> (-> io wheels) 0)
-                  (set! *skate3-bridge-ground-y* (-> io position y)))
-              (when (and (< (-> io state) 200) (>= (-> io wheels) 3))
-                (vector-copy! *skate3-bridge-safe-pos* (-> io position))
-                ;; Jak stands a little above where the board's wheels touch.
-                (+! (-> *skate3-bridge-safe-pos* y) (meters 0.3)))
-              (> (-> io position y) (- *skate3-bridge-ground-y* SKATE3_FALL_LIMIT))))
+      ((!= (pc-skate3-bridge io) 0)
+       (target-skate3-bridge-release)
+       (set! *jak3-skate3-bridge-enabled* #f)
+       #f)
+      ((begin
+         (if (> (-> io wheels) 0)
+             (set! *skate3-bridge-ground-y* (-> io position y)))
+         (when (and (< (-> io state) 200) (>= (-> io wheels) 3))
+           (vector-copy! *skate3-bridge-safe-pos* (-> io position))
+           ;; Jak stands a little above where the board's wheels touch.
+           (+! (-> *skate3-bridge-safe-pos* y) (meters 0.3)))
+         (< (-> io position y) (- *skate3-bridge-ground-y* SKATE3_FALL_LIMIT)))
+       ;; Fallen out of the world the engine knows (it was standing on something
+       ;; the engine could not see, or went off the level). Put Jak back where
+       ;; the board last stood and give him the jetboard.
+       (move-to-point! (-> self control) *skate3-bridge-safe-pos*)
+       (vector-reset! (-> self control transv))
+       (target-skate3-bridge-release)
+       (set! *jak3-skate3-bridge-enabled* #f)
+       #f)
+      (#t
        (let ((dx (- (-> io position x) (-> *skate3-bridge-world-center* x)))
              (dz (- (-> io position z) (-> *skate3-bridge-world-center* z))))
          (when (> (+ (* dx dx) (* dz dz)) (* SKATE3_TELEPORT_DIST SKATE3_TELEPORT_DIST))
@@ -381,15 +407,13 @@
              (dz (- (-> io position z) (-> *skate3-bridge-world-center* z)))
              (dy (- (-> io position y) (-> *skate3-bridge-world-center* y))))
          (when (or (> (+ (* dx dx) (* dz dz)) (* SKATE3_WORLD_REFRESH_DIST SKATE3_WORLD_REFRESH_DIST))
-                   (> (fabs dy) (* 0.5 SKATE3_WORLD_HALF_HEIGHT)))
+                   (> (fabs dy) (* 0.5 SKATE3_WORLD_HALF_HEIGHT))
+                   (and *skate3-bridge-world-objects?*
+                        (> (- (-> *display* base-clock frame-counter) *skate3-bridge-world-time*) (seconds 0.75))))
            (skate3-bridge-gather-world (-> io position))
            (set! (-> io command) 5)
            (pc-skate3-bridge io)))
-       #t)
-      (else
-       (target-skate3-bridge-release)
-       (set! *jak3-skate3-bridge-enabled* #f)
-       #f))))
+       #t))))
 
 (defbehavior target-skate3-bridge-on-foot target ()
   "Called from Jak's normal post. If gk was started with the bridge configured,
@@ -482,9 +506,15 @@
        (set! *jak3-skate3-bridge-enabled* #f))
      (if *jak3-skate3-bridge-hud*
          (skate3-bridge-draw-hud))
+     ;; The engine has its own walking mode (states in the 500s), which it can
+     ;; fall into by itself. Jak has his own legs: he gets off instead.
+     (if (>= (-> *skate3-bridge-io* state) 500)
+         (+! *skate3-bridge-off-board-frames* 1)
+         (set! *skate3-bridge-off-board-frames* 0))
      ;; Triangle gets off the board, as in Skate 3 (R2 is a grab here).
-     (if (and (not *jak3-skate3-bridge-scripted-input*)
-              (cpad-pressed? (-> self control cpad number) triangle)
+     (if (and (or (> *skate3-bridge-off-board-frames* 30)
+                  (and (not *jak3-skate3-bridge-scripted-input*)
+                       (cpad-pressed? (-> self control cpad number) triangle)))
               (not (focus-test? self dead grabbed))
               (not *pause-lock*))
          (go target-board-get-off (process->handle self) #f))

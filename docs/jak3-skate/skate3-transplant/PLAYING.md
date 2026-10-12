@@ -57,8 +57,13 @@ watching the game's log and screenshots:
   the pad, mounted the board (R2), pushed to about 11.9 m/s (Cross), steered
   (left stick), did an ollie and a kickflip from right-stick gestures, switched
   to the jetboard and back, and dismounted (Triangle), twice over.
-- **Riding** on the level's own collision in Spargus and on Haven City's port,
-  following slopes and stopping at walls.
+- **Riding** on the game's own collision, following slopes and stopping at
+  walls, in Spargus, Haven City's port and industrial section, the desert, the
+  forest, the sewer and the stadium (`skate3-bridge-levels.gc`: 11 to 55 m
+  ridden in four seconds of pushing at each).
+- **Not floating.** With Jak on the skateboard his lower foot joint measured
+  0.09 to 0.28 m above the ground under him across those levels; the jetboard
+  carries him about a metre up.
 - **Tricks** recognised, named and scored by Skate 3's own logic: ollie,
   kickflip.
 - **Grinds.** Restarted above grind rails the engine had found in Spargus, the
@@ -85,10 +90,16 @@ watching the game's log and screenshots:
 - **No physical controller has been used.** Key presses reach the same pad
   code a controller does, but they are all-or-nothing, so partial stick
   deflection, and how the Flickit gestures feel by hand, are untested.
-- **Only the level's solid background is known to the engine.** Moving
-  platforms, doors, vehicles and characters are not obstacles to the
-  skateboard, and it cannot ride on them. If Jak drops 30 m below where the
-  board last touched down the bridge switches off and the jetboard takes over.
+- **Collision is the level plus solid objects.** The engine is given the
+  background and the meshes of obstacles, platforms and pushers around Jak,
+  refreshed every three quarters of a second while any are near. Riding on a
+  moving platform, and doors, have not been tried. Vehicles and characters are
+  not obstacles to the skateboard. If Jak drops 30 m below where the board last
+  touched down he is put back there and given the jetboard.
+- **The mine's start point did not work.** Jak arrives there under attack, and
+  the bridge switched itself off; why was not established.
+- **The engine's own walking mode is not used.** If the engine takes the skater
+  off the board by itself, Jak gets off the board.
 - **Jak can still touch things.** Triggers, pickups and characters react to him
   as usual. The jetboard damages anything it touches, which in Spargus turns
   the citizens hostile and gets Jak shot; while the bridge drives the board
@@ -104,8 +115,8 @@ watching the game's log and screenshots:
 - **The camera is Jak's own**, not Skate 3's, and the right stick no longer
   turns it while skating.
 - **Jak's head and fingers do not move**; they ride on his chest and hands.
-- **Missions, cutscenes and levels other than Spargus and the port have not
-  been tried.**
+- **Missions and real cutscenes have not been tried.** Only a scripted grab
+  and release, as cutscenes do to Jak, was.
 - **Frame rates other than 60** have only been exercised through the clock path
   at 60; the engine is stepped from game time at its own fixed rate.
 
@@ -126,6 +137,7 @@ resets the game when it disconnects):
 (ml "goal_src/jak3/pc/debug/skate3-bridge-observe.gc"); watches while you play
 (ml "goal_src/jak3/pc/debug/skate3-bridge-steer.gc")  ; mirror check, partial stick, cutscene grab
 (ml "goal_src/jak3/pc/debug/skate3-bridge-ollie-grind.gc") ; roll at rails and ollie onto them
+(ml "goal_src/jak3/pc/debug/skate3-bridge-levels.gc") ; six more levels, with foot height above ground
 ```
 
 `skate3-bridge-grind.gc` and `skate3-bridge-ollie-grind.gc` need an engine library that also exports

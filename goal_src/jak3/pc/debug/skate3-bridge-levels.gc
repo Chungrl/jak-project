@@ -1,0 +1,136 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; (AI-assisted) Manual check of the Skate 3 bridge across levels. For each of
+;; a list of start points it loads the level, notes where Jak stands, mounts
+;; the board, pushes for four seconds, ollies, and reports the collision the
+;; engine was given, how far Jak travelled, how high his feet are above the
+;; ground under him (a skateboard's deck is a few centimetres up; anything
+;; like a metre would be "floating"), and whether he sank or rose compared with
+;; standing. Not part of any DGO.
+
+(define *sk3l-phase* 0)
+(define *sk3l-timer* 0)
+(define *sk3l-count* 0)
+(define *sk3l-level* 0)
+(define *sk3l-stand-y* 0.0)
+(define *sk3l-pops* 0)
+(define *sk3l-start* (new 'global 'vector))
+(define *sk3l-names* (new 'static 'boxed-array :type string
+                       "desert-start" "ctyinda-start" "foresta-start" "minea-start" "sewer-start" "stadium-start"))
+
+(defun sk3l-shot ((index int))
+  (set! (-> *screen-shot-settings* width) 1920)
+  (set! (-> *screen-shot-settings* height) 1080)
+  (set! (-> *screen-shot-settings* msaa) 4)
+  (clear *temp-string*)
+  (format *temp-string* "sk3-l~D-~S" index (-> *sk3l-names* index))
+  (copyn-charp<-string (-> *screen-shot-settings* name) *temp-string* 244)
+  (pc-screen-shot)
+  (none))
+
+(defun sk3l-feet ()
+  "Height of Jak's lower foot joint above the ground spot under him."
+  (- (fmin (-> *target* node-list data 42 bone transform trans y)
+           (-> *target* node-list data 48 bone transform trans y))
+     (-> *target* control gspot-pos y)))
+
+(defun sk3l-next ((frames int))
+  (+! *sk3l-phase* 1)
+  (set! *sk3l-timer* frames)
+  (none))
+
+(defun sk3l-tick ()
+  (let ((io *skate3-bridge-io*)
+        (phase *sk3l-phase*))
+    (cond
+      ((not *target*) #f)
+      ((> *sk3l-timer* 0) (+! *sk3l-timer* -1))
+      ((= phase 0)
+       ;; never change level under a dead Jak
+       (when (and (!= (-> *target* next-state name) 'target-continue) (not (focus-test? *target* dead)))
+         (cond
+           ((>= *sk3l-level* (-> *sk3l-names* length))
+            (set! *jak3-skate3-bridge-scripted-input* #f)
+            (format 0 "SK3TEST done~%")
+            (set! *sk3l-phase* 99))
+           (else
+            (set! *jak3-skate3-bridge-scripted-input* #f)
+            (let ((cont (get-continue-by-name *game-info* (-> *sk3l-names* *sk3l-level*))))
+              (cond
+                (cont
+                 (start 'play cont)
+                 (set! *sk3l-count* 0)
+                 (sk3l-next 0))
+                (else
+                 (format 0 "SK3TEST level ~S: no such start point~%" (-> *sk3l-names* *sk3l-level*))
+                 (+! *sk3l-level* 1))))))))
+      ((= phase 1)
+       ;; wait for the level and for Jak to be standing in it
+       (+! *sk3l-count* 1)
+       (when (or (and (!= (-> *target* next-state name) 'target-continue) (> *sk3l-count* 600)
+                      (not (focus-test? *target* dead)))
+                 (> *sk3l-count* 3000))
+         (set! *sk3l-stand-y* (-> *target* control trans y))
+         (vector-copy! *sk3l-start* (-> *target* control trans))
+         (format 0 "SK3TEST level ~S: standing, Jak ~A, feet ~m above the ground~%"
+                 (-> *sk3l-names* *sk3l-level*) (-> *target* state name) (sk3l-feet))
+         (set! *jak3-skate3-bridge-scripted-input* #t)
+         (skate3-bridge-clear-input! io)
+         (set! *jak3-skate3-bridge-enabled* #t)
+         (send-event *target* 'change-mode 'board #f)
+         (set! *sk3l-count* 0)
+         (sk3l-next 0)))
+      ((= phase 2)
+       (+! *sk3l-count* 1)
+       (cond
+         ((and *jak3-skate3-bridge-active* (> *sk3l-count* 150))
+          (format 0 "SK3TEST level ~S: on the skateboard, feet ~m above the ground, ~m ~S than standing"
+                  (-> *sk3l-names* *sk3l-level*) (sk3l-feet)
+                  (fabs (- (-> *target* control trans y) *sk3l-stand-y*))
+                  (if (> (-> *target* control trans y) *sk3l-stand-y*) "higher" "lower"))
+          (format 0 "; world ~D triangles ~D rails, ~D cells full~%"
+                  (-> io world-triangles) (-> io world-rails) *skate3-bridge-world-overflows*)
+          (set! *sk3l-pops* (the-as int (-> io pops)))
+          (set! (-> io buttons) (the-as uint #x1000))
+          (sk3l-next 240))
+         ((> *sk3l-count* 1200)
+          (format 0 "SK3TEST level ~S: NOT SKATING, Jak ~A, enabled ~A active ~A in-water ~A~%"
+                  (-> *sk3l-names* *sk3l-level*) (-> *target* state name)
+                  *jak3-skate3-bridge-enabled* *jak3-skate3-bridge-active* *jak3-skate3-bridge-in-water*)
+          (+! *sk3l-level* 1)
+          (set! *sk3l-phase* 0))))
+      ((= phase 3)
+       (sk3l-shot *sk3l-level*)
+       (skate3-bridge-clear-input! io)
+       (set! (-> io right-y) -1.0)
+       (sk3l-next 9))
+      ((= phase 4)
+       (set! (-> io right-y) 1.0)
+       (sk3l-next 5))
+      ((= phase 5)
+       (skate3-bridge-clear-input! io)
+       (sk3l-next 120))
+      ((= phase 6)
+       (format 0 "SK3TEST level ~S: rode ~m, ~D pop, Jak ~A, bridge ~A"
+               (-> *sk3l-names* *sk3l-level*)
+               (vector-vector-xz-distance (-> *target* control trans) *sk3l-start*)
+               (- (the-as int (-> io pops)) *sk3l-pops*)
+               (-> *target* state name) *jak3-skate3-bridge-active*)
+       (format 0 ", engine state ~D wheels ~D" (-> io state) (-> io wheels))
+       (format 0 ", feet ~m above the ground, health ~f; world ~D triangles ~D rails~%"
+               (sk3l-feet) (-> *target* fact health) (-> io world-triangles) (-> io world-rails))
+       (+! *sk3l-level* 1)
+       (set! *sk3l-phase* 0))))
+  (none))
+
+(set! *sk3l-phase* 0)
+(set! *sk3l-level* 0)
+(set! *sk3l-timer* 0)
+(format 0 "SK3TEST begin~%")
+(process-spawn-function process :name "sk3-levels"
+  (lambda :behavior process ()
+    (loop
+      (sk3l-tick)
+      (suspend)))
+  :to *display-pool*)

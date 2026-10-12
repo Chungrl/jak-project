@@ -194,6 +194,7 @@ struct Engine {
   float board_fix[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
   bool board_ready = false;
   std::vector<float> board_vertices;
+  float slowest_build_ms = 20.f;
   // Game time not yet turned into fixed engine steps.
   float time_bank = 0.f;
   float period = 1.f / 60.f;
@@ -517,6 +518,12 @@ void write_outputs(BridgeIO* io) {
   if (g_engine.world_info(g_engine.session, &info) == 0) {
     io->world_triangles = info.triangles;
     io->world_rails = info.rails;
+    // a world that takes long to build is worth knowing about; say so once per new record
+    if (info.build_ms > g_engine.slowest_build_ms + 10.f) {
+      g_engine.slowest_build_ms = info.build_ms;
+      lg::info("[skate3] slowest world build so far: {:.0f} ms for {} triangles", info.build_ms,
+               info.triangles);
+    }
   }
   SkScore score;
   memset(&score, 0, sizeof(score));
